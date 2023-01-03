@@ -1,0 +1,14 @@
+Package: missBART
+Type: Package
+Title: A multivariate extension of BART for modelling non-linear data with non-ignorable missingness in the response variable
+Version: 0.1.0
+Authors@R: c(person("Yong Chen", "Goh", email="yong.goh.2022@mumail.ie", role=c("aut", "cre")),
+  person("Keefe", "Murphy", email="keefe.murphy@mu.ie", role=c("aut")),
+  person("Andrew", "Parnell", email="andrew.parnell@mu.ie", role=c("aut")))
+Description: More about what it does (maybe more than one line)
+    Use four spaces when indenting paragraphs within the Description.
+License: GPL (>=2)
+Encoding: UTF-8
+LazyData: true
+BugReports: https://github.com/yongchengoh/missBART
+Imports: Matrix, CholWishart
