@@ -1,26 +1,26 @@
-#' Title
+#' BART and probit regression for data with non-ignorable missingness in the response.
 #'
-#' @param x
-#' @param y
-#' @param x_test
-#' @param n_trees
-#' @param burn
-#' @param iters
-#' @param thin
-#' @param tree_prior_params
-#' @param hypers
-#' @param scale
-#' @param include_x
-#' @param include_y
-#' @param show_progress
-#' @param progress_every
-#' @param ...
+#' @param x BART covariates
+#' @param y data
+#' @param x_test out-of-sample covariates. If not specificied, the default is set to NA and no out-of-sample predictions will be made.
+#' @param n_trees number of BART trees. Default is set to 90.
+#' @param burn burn-in samples. Default is set to 1000.
+#' @param iters post-burn-in samples (after thinning). Default is set to 1000.
+#' @param thin thinning. Default is set to 3.
+#' @param tree_prior_params prior parameters for BART trees.
+#' @param hypers prior parameters for BART parameters
+#' @param scale logical. Whether to scale data to range (-0.5, 0.5).
+#' @param include_x logical. Include x in probit model?
+#' @param include_y logical. Include y in probit model?
+#' @param show_progress logical.
+#' @param progress_every integer value stating how often to update the progress bar.
+#' @param ... Catches unused arguments
 #'
-#' @return
+#' @return a list containing BART predictions and imputed values
 #' @export
 #'
 #' @examples
-missBART.probit = function(x, y, x_test = NA, n_trees = 20, burn = 1000, iters = 1000, thin = 3, tree_prior_params = tree_list(), hypers = hypers_list(),
+missBART.probit = function(x, y, x_test = NA, n_trees = 90, burn = 1000, iters = 1000, thin = 3, tree_prior_params = tree_list(), hypers = hypers_list(),
                            scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, ...) {
 
   y = as.matrix(y)
@@ -90,7 +90,7 @@ missBART.probit = function(x, y, x_test = NA, n_trees = 20, burn = 1000, iters =
   accepted_trees <- lapply(seq_len(n_trees), function(x) accepted_trees[[x]] = df)
   change_id <- lapply(seq_len(n_trees), function(x) change_id[[x]] = rep(1, n))
 
-  new_omega <- drop(rWishart(1, alpha, V))
+  new_omega <- drop(stats::rWishart(1, alpha, V))
   kappa = n_trees*16
   tree_mu[[1]] = sapply(seq_len(n_trees), function(x) list(rMVN(mu = matrix(mu0, nrow=p), Q = kappa*diag(p))))
   tree_phi = lapply(seq_len(n_trees), function(x) rep(tree_mu[[1]][[x]], n))
@@ -217,7 +217,7 @@ missBART.probit = function(x, y, x_test = NA, n_trees = 20, burn = 1000, iters =
 
     if(p==1){
       new_R = diag(1, p)
-      new_B = update_B(x, y, z, new_R, 0.01, include_x = include_x, include_y = include_y)
+      new_B = update_B(x, y, z, tau_b = 0.01, include_x = include_x, include_y = include_y)
     } else {
       W = update_W(R = new_R, z = z)
       Sigma_gamma = update_sigma_gamma(p, Y, Psi, W)
@@ -235,7 +235,7 @@ missBART.probit = function(x, y, x_test = NA, n_trees = 20, burn = 1000, iters =
     ###----- Out-of-Sample Predictions -----###
     if(!is.na(x_test)){
       new_pred_mean = Reduce("+", tree_phi_pred)
-      new_predictions = multi_rMVN(n_new, new_pred_mean, new_omega)
+      new_predictions = multi_rMVN(new_pred_mean, new_omega)
     }
 
     ###----- Store posterior samples after burn-in, accounting for thinning -----###
@@ -246,7 +246,7 @@ missBART.probit = function(x, y, x_test = NA, n_trees = 20, burn = 1000, iters =
       B_post = append(B_post, list(new_B))
       if(!is.na(x_test)) new_y_post = append(new_y_post, list(new_predictions))
 
-      pred = multi_rMVN(n, cur_pred, new_omega)
+      pred = multi_rMVN(cur_pred, new_omega)
       pred[missing_index] = y[missing_index]
       y_pred = append(y_pred, list(pred))
     }

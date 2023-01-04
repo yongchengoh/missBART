@@ -1,11 +1,11 @@
 #' Title
 #'
-#' @param mu0
-#' @param kappa
-#' @param alpha
-#' @param V
+#' @param mu0 hyperparameter
+#' @param kappa hyperparameter
+#' @param alpha hyperparameter
+#' @param V hyperparameter
 #'
-#' @return
+#' @return list of hyperparameters
 #' @export
 #'
 #' @examples
@@ -15,12 +15,12 @@ hypers_list <- function(mu0 = 0, kappa = 1, alpha = 1, V = 1) {
 
 #' Title
 #'
-#' @param prior_alpha
-#' @param prior_beta
-#' @param min_node
-#' @param max_attempt
+#' @param prior_alpha hyperparameter
+#' @param prior_beta hyperparameter
+#' @param min_node minimum number of observations that should fall into a single terminal node.
+#' @param max_attempt maximum number of attempts to find a suitable tree
 #'
-#' @return
+#' @return list of hyperparameters
 #' @export
 #'
 #' @examples

@@ -1,19 +1,17 @@
 #' Title
 #'
-#' @param df
-#' @param x
-#' @param x_vars
-#' @param min_node
-#' @param max_attempt
-#' @param i
-#' @param probit
-#' @param miss_row
+#' @param df dataframe
+#' @param x covariates
+#' @param x_vars vector
+#' @param min_node minimum number of observations that should fall into a single terminal node.
+#' @param max_attempt maximum number of attempts to find a suitable tree
+#' @param i iteration number
 #'
 #' @return
 #' @export
 #'
 #' @examples
-propose_tree = function(df, x, x_vars, min_node, max_attempt = 100, i, probit = FALSE, miss_row = NA) {
+propose_tree = function(df, x, x_vars, min_node, max_attempt = 100, i) {
   n = nrow(x)
   if(nrow(df) == 1) {
     #-If tree is only a stump, only grow it.
@@ -67,7 +65,7 @@ propose_tree = function(df, x, x_vars, min_node, max_attempt = 100, i, probit = 
                             lower = min(x[,grow_variable], na.rm = TRUE)
                             upper = max(x[,grow_variable], na.rm = TRUE)
                           }
-                          new_point = runif(1, lower, upper)
+                          new_point = stats::runif(1, lower, upper)
                         }, "integer" = {
                           lower = 0
                           upper = 1
@@ -81,7 +79,7 @@ propose_tree = function(df, x, x_vars, min_node, max_attempt = 100, i, probit = 
                  if(!is.na(new_point)) {bad_grow_variable = FALSE}
                } #End while(bad_grow_variable)
              } else { #This is if nrow(df) == 1
-               new_point <- ifelse(class(x[,grow_variable])=="numeric", runif(1, lower, upper), sample(unique(x[,grow_variable]), 1))
+               new_point <- ifelse(class(x[,grow_variable])=="numeric", stats::runif(1, lower, upper), sample(unique(x[,grow_variable]), 1))
              }
              # new_point = sample(x[which(x[,grow_variable]<upper & x[,grow_variable]>=lower),grow_variable], 1)
              new_depth = df$depth[grow_node] + 1
@@ -131,7 +129,7 @@ propose_tree = function(df, x, x_vars, min_node, max_attempt = 100, i, probit = 
                lower = min(x[,change_variable])
                upper = max(x[,change_variable])
              }
-             change_value = runif(1, lower, upper)
+             change_value = stats::runif(1, lower, upper)
              # change_value = sample(x[which(x[,change_variable]<upper & x[,change_variable]>=lower),change_variable],1)
              new_df = df
              new_df$lower[new_df$parent == change_node] = lower
@@ -158,13 +156,22 @@ propose_tree = function(df, x, x_vars, min_node, max_attempt = 100, i, probit = 
     change_points = get_change_points(new_df, x)
     empty_terminal = length(unique(change_points)) != length(as.numeric(setdiff(row.names(new_df), new_df$parent)))
     decent_tree = isFALSE(empty_terminal) && all(table(change_points) >= min_node)
-    if(probit & decent_tree) decent_tree = !Reduce(any, lapply(split(miss_row, change_points), function(x) all(isTRUE(x))))
+    # if(probit & decent_tree) decent_tree = !Reduce(any, lapply(split(miss_row, change_points), function(x) all(isTRUE(x))))
     # decent_tree = all(tabulate(change_points) >= min_node)
     attempt = attempt + 1
   } # End while loop
   return(list("new_df"=new_df, "MOVE"=MOVE, "change_points"=change_points, "decent_tree"=decent_tree))
 }
 
+#' Get vector for sorting observations into terminal nodes
+#'
+#' @param df dataframe
+#' @param x covariates
+#'
+#' @return a vector
+#' @export
+#'
+#' @examples
 get_change_points <- function(df, x) {
   n = nrow(x)
   if(nrow(df) == 1) {
@@ -205,11 +212,11 @@ get_change_points <- function(df, x) {
   return(change_points)
 }
 
-#' Title
+#' Computes the log marginal likelihood for accepting/rejecting BART trees
 #'
-#' @param node_partial_res
-#' @param kappa
-#' @param omega
+#' @param node_partial_res matrix
+#' @param kappa scalar
+#' @param omega matrix
 #'
 #' @return
 #' @export
@@ -231,12 +238,11 @@ log_marginal_likelihood <- function(node_partial_res, kappa, omega) {
   return(n/2 * log(det_omega) - 0.5 * log(det_omega_mu) - 0.5 * (t(mu_mu) %*% omega_mu %*% mu_mu + sum(apply(node_partial_res, 1, function(x) t(x) %*% omega %*% x))))
 }
 
-# Tree priors
-#' Title
+#' Compute tree priors at the node level
 #'
-#' @param depth
-#' @param prior_alpha
-#' @param prior_beta
+#' @param depth scalar
+#' @param prior_alpha scalar
+#' @param prior_beta scalar
 #'
 #' @return
 #' @export
@@ -246,13 +252,13 @@ node_priors <- function(depth, prior_alpha, prior_beta) {
   return(prior_alpha * (1 + depth)^(-prior_beta))
 }
 
-#' Title
+#' Compute tree priors
 #'
-#' @param nodes
-#' @param parents
-#' @param depth
-#' @param prior_alpha
-#' @param prior_beta
+#' @param nodes nodes of trees
+#' @param parents parents of nodes
+#' @param depth current depth of tree
+#' @param prior_alpha hyperparameter
+#' @param prior_beta hyperparameter
 #'
 #' @return
 #' @export
