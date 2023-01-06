@@ -59,3 +59,8 @@ a list containing BART predictions and imputed values
 \description{
 BART and probit regression for data with non-ignorable missingness in the response.
 }
+\examples{
+x <- matrix(runif(6), ncol = 2)
+y <- matrix(runif(6), ncol = 2) \%*\% matrix(rnorm(4), ncol=2)
+missBART.probit(x, y, n_trees = 2, burn = 2, iters = 2, thin = 1)
+}

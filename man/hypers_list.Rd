@@ -2,7 +2,7 @@
 % Please edit documentation in R/hypers.R
 \name{hypers_list}
 \alias{hypers_list}
-\title{Title}
+\title{BART prior parameters}
 \usage{
 hypers_list(mu0 = 0, kappa = 1, alpha = 1, V = 1)
 }
@@ -19,5 +19,8 @@ hypers_list(mu0 = 0, kappa = 1, alpha = 1, V = 1)
 list of hyperparameters
 }
 \description{
-Title
+BART prior parameters
+}
+\examples{
+hypers_list(mu0 = 5, kappa = 2, alpha = 1, V = 2)
 }

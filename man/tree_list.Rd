@@ -2,7 +2,7 @@
 % Please edit documentation in R/hypers.R
 \name{tree_list}
 \alias{tree_list}
-\title{Title}
+\title{Tree prior parameters}
 \usage{
 tree_list(prior_alpha = 0.95, prior_beta = 2, min_node = 5, max_attempt = 100)
 }
@@ -19,5 +19,8 @@ tree_list(prior_alpha = 0.95, prior_beta = 2, min_node = 5, max_attempt = 100)
 list of hyperparameters
 }
 \description{
-Title
+Tree prior parameters
+}
+\examples{
+tree_list(prior_alpha = 0.8, prior_beta = 3)
 }

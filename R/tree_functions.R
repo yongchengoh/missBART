@@ -1,4 +1,4 @@
-#' Title
+#' A function for proposing an updated tree structure
 #'
 #' @param df dataframe
 #' @param x covariates
@@ -7,10 +7,16 @@
 #' @param max_attempt maximum number of attempts to find a suitable tree
 #' @param i iteration number
 #'
-#' @return
+#' @return A dataframe containing details of a new tree structure
 #' @export
 #'
 #' @examples
+#' # Create a dataframe representing the root node of a tree
+#' df <- data.frame(matrix(ncol = 7, nrow = 1))
+#' colnames(df) <- c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
+#' df[1,] <- c(0,0,1,0,1,0,0)
+#' x <- matrix(runif(9), ncol=3)
+#' propose_tree(df, x, seq(ncol(x)), min_node = 1, max_attempt = 1, i = 1)
 propose_tree = function(df, x, x_vars, min_node, max_attempt = 100, i) {
   n = nrow(x)
   if(nrow(df) == 1) {
@@ -163,112 +169,3 @@ propose_tree = function(df, x, x_vars, min_node, max_attempt = 100, i) {
   return(list("new_df"=new_df, "MOVE"=MOVE, "change_points"=change_points, "decent_tree"=decent_tree))
 }
 
-#' Get vector for sorting observations into terminal nodes
-#'
-#' @param df dataframe
-#' @param x covariates
-#'
-#' @return a vector
-#' @export
-#'
-#' @examples
-get_change_points <- function(df, x) {
-  n = nrow(x)
-  if(nrow(df) == 1) {
-    change_points <- rep(1, n)
-  } else {
-    change_points <- c()
-    terminal_nodes <- as.numeric(setdiff(row.names(df), df$parent))
-    terminal_obs <- list()
-    for(j in seq_along(terminal_nodes)) {
-      y_index <- list()
-      parent <- terminal_nodes[j]
-      count <- 1
-      while(parent != 1) {
-        #Add in if/else for type of variable (numeric, integer, categorical)
-        #Add in split if missing (not if m==0/1)
-        type = class(x[,df$split_variable[parent]])
-        switch(EXPR = type,
-               "numeric" = {
-                 y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] <= df$split_value[parent]) else which(x[,df$split_variable[parent]] > df$split_value[parent])
-               }, "integer" = {
-                 y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] == df$split_value[parent]) else which(x[,df$split_variable[parent]] != df$split_value[parent])
-               }, "factor" = {
-                 y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] == df$split_value[parent]) else which(x[,df$split_variable[parent]] != df$split_value[parent])
-               }) #End switch
-        parent <- df$parent[parent]
-        count <- count + 1
-      }
-      terminal_obs[[j]] = Reduce(intersect, y_index)
-      if(length(terminal_obs[[j]])==0) terminal_obs[[j]] = NA
-    }
-    terminal_obs = terminal_obs[!is.na(terminal_obs)]
-    change_points = vector(length=n)
-
-    for(k in 1:length(terminal_obs)){
-      change_points[terminal_obs[[k]]] = k
-    }
-  }
-  return(change_points)
-}
-
-#' Computes the log marginal likelihood for accepting/rejecting BART trees
-#'
-#' @param node_partial_res matrix
-#' @param kappa scalar
-#' @param omega matrix
-#'
-#' @return
-#' @export
-#'
-#' @examples
-log_marginal_likelihood <- function(node_partial_res, kappa, omega) {
-  n = nrow(node_partial_res)
-  p = ncol(node_partial_res)
-  rbar <- colMeans(node_partial_res)
-  omega_mu = diag(kappa, p) + n*omega
-  mu_mu = n * (chol2inv(PD_chol(omega_mu)) %*% omega %*% rbar)
-  if(p==1){
-    det_omega = omega
-    det_omega_mu = omega_mu
-  } else {
-    det_omega = det(omega)
-    det_omega_mu = det(omega_mu)
-  }
-  return(n/2 * log(det_omega) - 0.5 * log(det_omega_mu) - 0.5 * (t(mu_mu) %*% omega_mu %*% mu_mu + sum(apply(node_partial_res, 1, function(x) t(x) %*% omega %*% x))))
-}
-
-#' Compute tree priors at the node level
-#'
-#' @param depth scalar
-#' @param prior_alpha scalar
-#' @param prior_beta scalar
-#'
-#' @return
-#' @export
-#'
-#' @examples
-node_priors <- function(depth, prior_alpha, prior_beta) {
-  return(prior_alpha * (1 + depth)^(-prior_beta))
-}
-
-#' Compute tree priors
-#'
-#' @param nodes nodes of trees
-#' @param parents parents of nodes
-#' @param depth current depth of tree
-#' @param prior_alpha hyperparameter
-#' @param prior_beta hyperparameter
-#'
-#' @return
-#' @export
-#'
-#' @examples
-tree_priors <- function(nodes, parents, depth, prior_alpha, prior_beta) {
-  depth <- as.numeric(depth)
-  node_prob <- rep(NA, length=length(nodes))
-  for(i in seq_along(nodes)) {
-    node_prob[i] <- log(ifelse(nodes[i] %in% parents, node_priors(depth[i], prior_alpha, prior_beta), 1 - node_priors(depth[i], prior_alpha, prior_beta)))
-  }
-  return(sum(node_prob))
-}

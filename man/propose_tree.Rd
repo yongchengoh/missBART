@@ -2,7 +2,7 @@
 % Please edit documentation in R/tree_functions.R
 \name{propose_tree}
 \alias{propose_tree}
-\title{Title}
+\title{A function for proposing an updated tree structure}
 \usage{
 propose_tree(df, x, x_vars, min_node, max_attempt = 100, i)
 }
@@ -19,6 +19,17 @@ propose_tree(df, x, x_vars, min_node, max_attempt = 100, i)
 
 \item{i}{iteration number}
 }
+\value{
+A dataframe containing details of a new tree structure
+}
 \description{
-Title
+A function for proposing an updated tree structure
+}
+\examples{
+# Create a dataframe representing the root node of a tree
+df <- data.frame(matrix(ncol = 7, nrow = 1))
+colnames(df) <- c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
+df[1,] <- c(0,0,1,0,1,0,0)
+x <- matrix(runif(9), ncol=3)
+propose_tree(df, x, seq(ncol(x)), min_node = 1, max_attempt = 1, i = 1)
 }

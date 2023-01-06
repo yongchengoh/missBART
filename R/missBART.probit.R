@@ -20,6 +20,9 @@
 #' @export
 #'
 #' @examples
+#' x <- matrix(runif(6), ncol = 2)
+#' y <- matrix(runif(6), ncol = 2) %*% matrix(rnorm(4), ncol=2)
+#' missBART.probit(x, y, n_trees = 2, burn = 2, iters = 2, thin = 1)
 missBART.probit = function(x, y, x_test = NA, n_trees = 90, burn = 1000, iters = 1000, thin = 3, tree_prior_params = tree_list(), hypers = hypers_list(),
                            scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, ...) {
 
