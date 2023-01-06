@@ -26,9 +26,9 @@ missBART.probit = function(x, y, x_test = NA, n_trees = 90, burn = 1000, iters =
   y = as.matrix(y)
   x = as.matrix(x)
 
+  min_y = apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
+  max_y = apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
   if(scale){
-    min_y = apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
-    max_y = apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
     y = t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
     if(nrow(y)==1) y = t(y)
     if(!is.na(x_test)) y_predict = t(apply(sweep(y_predict, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
@@ -112,11 +112,6 @@ missBART.probit = function(x, y, x_test = NA, n_trees = 90, burn = 1000, iters =
   z[missing_index] = -1
   Y = as.matrix(cbind(rep(1,n), x, y))
   Y = Y[, c(1, which(c(rep(include_x, q), rep(include_y, p))) + 1)]
-
-  # MH method of sampling y_miss
-  y_miss_accept = vector(mode = "list", length = total_iters)
-  acceptance_l = matrix(ncol = total_iters, nrow = length(missing_index))
-  acceptance_p = matrix(ncol = total_iters, nrow = length(missing_index))
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(!is.na(x_test)){
@@ -247,13 +242,17 @@ missBART.probit = function(x, y, x_test = NA, n_trees = 90, burn = 1000, iters =
       if(!is.na(x_test)) new_y_post = append(new_y_post, list(new_predictions))
 
       pred = multi_rMVN(cur_pred, new_omega)
-      pred[missing_index] = y[missing_index]
+      # pred[missing_index] = y[missing_index]
       y_pred = append(y_pred, list(pred))
     }
   } # End of i iterations
 
   if(is.na(x_test)) new_y_post = NA
 
-  return(list(y_post = y_post, omega_post = omega_post, R_post = R_post, B_post = B_post, imputed = y, new_y_post = new_y_post, accepted_trees = accepted_trees, burn = burn, iters = iters, thin = thin))
+  return(list(y_post = y_post, omega_post = omega_post, R_post = R_post, B_post = B_post,
+              imputed = y, new_y_post = new_y_post, accepted_trees = accepted_trees,
+              burn = burn, iters = iters, thin = thin,
+              max_y = max_y, min_y = min_y,
+              y_pred = y_pred))
 }
 
