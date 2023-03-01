@@ -36,6 +36,8 @@ missBART.probit = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters
     }
   }
 
+  if(is.na(x_predict)) predict = FALSE
+
   min_y = apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
   max_y = apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
   if(scale){

@@ -3,8 +3,8 @@
 #'
 #' @param n number of observations
 #' @param p number of responses
-#' @param scale_par scale parameter
-#' @param scale_err scale error
+#' @param scale_par scale_par
+#' @param omega_diag precision ~ rWishart(1, p+1, diag(omega_diag, p))
 #'
 #' @return
 #' @export
@@ -16,15 +16,14 @@
 #' y = y_original = data$y
 #' x = data$x
 #' ome = data$ome
-sim_data_friedman = function(n, p = 1, scale_par = 1, scale_err = 0.5) {
+sim_data_friedman = function(n, p = 1, scale_par = 1, omega_diag = 500) {
   # Simulate some data using a multivariate version of Friedman
   # y = 10sin(πx1x2)+20(x3−0.5)2+10x4+5x5+ε
   X = matrix(NA, nrow = n, ncol = 5)
   for(i in 1:ncol(X)) X[,i] = stats::rnorm(n, 0, 1)
   pars = matrix(stats::rnorm(5 * p, sd = scale_par), ncol = p, nrow = 5) # 5 parameters on p dimensions
   y = mean = matrix(NA, ncol = p, nrow = n)
-  Omega = stats::rWishart(1, p+1, diag(1,p))[,,1]
-  #Omega = rWishart(1, p, scale_err*diag(p))[,,1]
+  Omega = stats::rWishart(1, p+1, diag(omega_diag,p))[,,1]
   if(p > 1) {
     err = mvrnorm(n, mu=rep(0, ncol(Omega)), Sigma = solve(Omega))
   } else {
