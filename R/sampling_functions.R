@@ -46,14 +46,14 @@ rMVNc   <- function(b, Q, is_chol = FALSE) {
 #' @export
 #'
 #' @examples multi_rMVN(matrix(0, ncol=2, nrow=10), diag(1,2))
-multi_rMVN = function(mean_mat, precision){
-  n = nrow(mean_mat)
-  p = ncol(mean_mat)
-  Y = matrix(nrow = n, ncol = p)
-  for(i in 1:n){
-    Y[i,] = rMVN(mean_mat[i,], precision)
+multi_rMVN <- function(mean_mat, precision) {
+  n <- nrow(mean_mat)
+  p <- ncol(mean_mat)
+  Y <- matrix(nrow = n, ncol = p)
+  for(i in 1:n) {
+    Y[i,] <- rMVNmu0(precision)
   }
-  return(Y)
+  return(Y + mean_mat)
 }
 
 #' Sampling from a matrix normal distribution MV(mu, U, V)

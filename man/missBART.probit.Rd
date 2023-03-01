@@ -7,11 +7,12 @@
 missBART.probit(
   x,
   y,
-  x_test = NA,
-  n_trees = 90,
-  burn = 1000,
-  iters = 1000,
-  thin = 3,
+  x_predict = NA,
+  n_trees = 20,
+  burn = 100,
+  iters = 100,
+  thin = 2,
+  predict = TRUE,
   tree_prior_params = tree_list(),
   hypers = hypers_list(),
   scale = TRUE,
@@ -27,7 +28,7 @@ missBART.probit(
 
 \item{y}{data}
 
-\item{x_test}{out-of-sample covariates. If not specificied, the default is set to NA and no out-of-sample predictions will be made.}
+\item{x_predict}{out-of-sample covariates. If not specificied, the default is set to NA and no out-of-sample predictions will be made.}
 
 \item{n_trees}{number of BART trees. Default is set to 90.}
 
@@ -37,7 +38,9 @@ missBART.probit(
 
 \item{thin}{thinning. Default is set to 3.}
 
-\item{tree_prior_params}{prior parameters for BART trees.}
+\item{predict}{whether or not to make out-of-sample predictions}
+
+\item{tree_prior_params}{prior parameters for BART trees}
 
 \item{hypers}{prior parameters for BART parameters}
 
@@ -62,5 +65,5 @@ BART and probit regression for data with non-ignorable missingness in the respon
 \examples{
 x <- matrix(runif(6), ncol = 2)
 y <- matrix(runif(6), ncol = 2) \%*\% matrix(rnorm(4), ncol=2)
-missBART.probit(x, y, n_trees = 2, burn = 2, iters = 2, thin = 1)
+missBART.probit(x, y, n_trees = 2, burn = 2, iters = 2, thin = 1, scale = FALSE)
 }

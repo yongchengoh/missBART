@@ -30,7 +30,7 @@ To demonstrate the use of the different functions in the package, we will simula
 ```{r}
 set.seed(123456789)
 
-n = 200
+n = 50
 p = 2 #no. of dependent variables
 q = 2 #no. of independent variables
 
@@ -108,7 +108,7 @@ obs_index = which(!is.na(y))
 Now that we have a dataset with MNAR missingness in the response, we can run `missBART.probit()`. 
 
 ```{r}
-missBART = missBART.probit(x, y, burn = 100, iters = 100, thin = 1, n_trees = 120, include_x = FALSE, include_y = TRUE, scale = FALSE, show_progress = FALSE)
+missBART = missBART.probit(x, y, burn = 100, iters = 100, thin = 1, n_trees = 10, include_x = FALSE, include_y = TRUE, scale = FALSE, show_progress = FALSE)
 
 y_pred = missBART$y_pred
 y_pred = Reduce("+", y_pred)/length(y_pred)

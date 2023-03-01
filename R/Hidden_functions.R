@@ -1,3 +1,9 @@
+rMVNmu0 <- function(Q) {
+  p  <- NCOL(Q)
+  z  <- stats::rnorm(p)
+  if(p == 1) z/sqrt(Q) else backsolve(PD_chol(Q), z)
+}
+
 PD_chol <- function(x, ...) tryCatch(chol(x, ...), error=function(e) {
   chol(Matrix::nearPD(x, base.matrix=TRUE)$mat, ...)
 })
@@ -37,6 +43,19 @@ sim_kappa = function(mu, a, b){ #tree_mu[[i]]
 }
 
 ###--------------------------------- PROBIT UPDATES ---------------------------------###
+probit_predictors = function(x, y, include_x, include_y, intercept = FALSE){
+  n = nrow(x)
+  if(intercept) Y = matrix(1,nrow=n, ncol=1) else Y = c()
+  if(include_x & !include_y){
+    Y = cbind(Y, x)
+  } else if (!include_x & include_y){
+    Y = cbind(Y, y)
+  } else if (include_x & include_y){
+    Y = cbind(Y, x, y)
+  }
+  return(Y)
+}
+
 update_z = function(Y, m, B, R){
   n = nrow(Y)
   mu = Y %*% B
@@ -48,24 +67,11 @@ update_z = function(Y, m, B, R){
 }
 
 # MCMC sample of B, the matrix of probit parameters
-update_B = function(x, y, z, tau_b = 0.01, include_x = TRUE, include_y = TRUE, center = TRUE){
-  if(center){
-    # x = scale(x, center = TRUE, scale = FALSE)
-    y = scale(y, center = TRUE, scale = FALSE)
-  }
-  n = nrow(y)
-  Y = matrix(1,nrow=n, ncol=1)
-  if(include_x & !include_y){
-    Y = cbind(Y, x)
-  } else if (!include_x & include_y){
-    Y = cbind(Y, y)
-  } else if (include_x & include_y){
-    Y = cbind(Y, x, y)
-  }
+update_B = function(y, z, Y, sigma, tau_b){
   k = ncol(Y)
   p = ncol(y)
   V = diag(p)
-  U = chol2inv(PD_chol(diag(tau_b, k) + t(Y)%*%Y))
+  U = chol2inv(chol(diag(tau_b, k) + t(Y)%*%Y))
   M = t(t(z) %*% Y %*% U)
   return(matrnorm(M, U, V))
 }
@@ -191,25 +197,62 @@ get_change_points <- function(df, x) {
     for(k in 1:length(terminal_obs)){
       change_points[terminal_obs[[k]]] = k
     }
+    max_node = max(unique(change_points))
+    change_points[which(change_points==0)] = sample(c(max_node, max_node - 1), 1)
   }
   return(change_points)
 }
 
+update_y_miss_BART = function(x, y, Y, z, z_hat, y_hat, n_trees, R, Omega, missing_index, accepted_class_trees, class_mu_i, include_x, include_y, MH_sd = 0.05){
+  n = nrow(y)
+  p = ncol(y)
+  q = ncol(x)
+  R_inv = if(p==1) 1 else chol2inv(PD_chol(R))
+  n_miss = length(missing_index)
+
+  p1 = -apply(y - y_hat, 1, function(x) crossprod(x, (Omega %*% x)))
+  l1 = -apply(z - z_hat, 1, function(x) crossprod(x, (R_inv %*% x)))
+
+  proposed_y = y
+  proposed_y[missing_index] = stats::rnorm(n_miss, mean = y[missing_index], sd = MH_sd)
+  Y = as.matrix(cbind(x, proposed_y))
+  Y = Y[, which(c(rep(include_x, q), rep(include_y, p)))]
+  z_hat = matrix(0, nrow=n, ncol=p)
+  for(k in 1:n_trees){
+    MH_change_id = get_change_points(accepted_class_trees[[k]], Y)
+    z_hat = z_hat + class_mu_i[[k]][MH_change_id,, drop=FALSE]
+  }
+  if(p==1){
+    # z_hat = t(z_hat)
+    Omega = matrix(Omega)
+  }
+  p2 = -apply(proposed_y - y_hat, 1, function(x) crossprod(x, (Omega %*% x))) #t(x) %*% Omega %*% x
+  l2 = -apply(z - z_hat, 1, function(x) crossprod(x, (R_inv %*% x))) #t(x) %*% R_inv %*% x
+  accept = mapply(MH, p1 = p1, l1 = l1, p2 = p2, l2 = l2)
+  which_accepted = which(accept)
+  y[which_accepted,] = proposed_y[which_accepted,]
+  return(list(accept = accept, y = y, p2 = p2, l2 = l2))
+}
+
 # Computes the log marginal likelihood for accepting/rejecting BART trees
-log_marginal_likelihood <- function(node_partial_res, kappa, omega) {
+log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
   n = nrow(node_partial_res)
   p = ncol(node_partial_res)
-  rbar <- colMeans(node_partial_res)
-  omega_mu = diag(kappa, p) + n*omega
-  mu_mu = n * (chol2inv(PD_chol(omega_mu)) %*% omega %*% rbar)
+  C = sum(apply(node_partial_res, 1, function(x) crossprod(crossprod(omega, x), x)))
+
+  vec = omega %*% colSums(node_partial_res) + kappa*mu0
+  mat = n*omega + diag(kappa, p)
+  vec2 = solve(mat, vec)
+  A = crossprod(crossprod(mat, vec2), vec2)
+
   if(p==1){
     det_omega = omega
-    det_omega_mu = omega_mu
   } else {
     det_omega = det(omega)
-    det_omega_mu = det(omega_mu)
   }
-  return(n/2 * log(det_omega) - 0.5 * log(det_omega_mu) - 0.5 * (t(mu_mu) %*% omega_mu %*% mu_mu + sum(apply(node_partial_res, 1, function(x) t(x) %*% omega %*% x))))
+
+  B = sum(diag(Vinv %*% omega))
+  return((n + alpha - p - 1)/2 * log(det_omega) - 0.5*(B + C - A))
 }
 
 # Compute tree priors at the node level
@@ -225,4 +268,15 @@ tree_priors <- function(nodes, parents, depth, prior_alpha, prior_beta) {
     node_prob[i] <- log(ifelse(nodes[i] %in% parents, node_priors(depth[i], prior_alpha, prior_beta), 1 - node_priors(depth[i], prior_alpha, prior_beta)))
   }
   return(sum(node_prob))
+}
+
+# Unscale data (data was scaled to [-0.5,0.5])
+unscale = function(scaled_val, min, max){
+  p = ncol(scaled_val)
+  n = nrow(scaled_val)
+  unscaled = matrix(nrow=n, ncol=p)
+  for(j in 1:p){
+    unscaled[,j] = (scaled_val[,j] + 0.5) * (max[j] - min[j]) + min[j]
+  }
+  return(unscaled)
 }

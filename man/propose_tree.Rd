@@ -4,7 +4,16 @@
 \alias{propose_tree}
 \title{A function for proposing an updated tree structure}
 \usage{
-propose_tree(df, x, x_vars, min_node, max_attempt = 100, i)
+propose_tree(
+  df,
+  x,
+  x_vars,
+  min_node,
+  max_attempt = 50,
+  i,
+  probit = FALSE,
+  miss_row = NA
+)
 }
 \arguments{
 \item{df}{dataframe}
@@ -18,6 +27,10 @@ propose_tree(df, x, x_vars, min_node, max_attempt = 100, i)
 \item{max_attempt}{maximum number of attempts to find a suitable tree}
 
 \item{i}{iteration number}
+
+\item{probit}{logical. Indicates whether tree is for continuous or binary outcomes.}
+
+\item{miss_row}{index of missing rows}
 }
 \value{
 A dataframe containing details of a new tree structure

@@ -12,7 +12,8 @@ LazyData: true
 BugReports: https://github.com/yongchengoh/missBART
 Imports: Matrix, 
   CholWishart,
-  extraDistr
+  extraDistr,
+  MASS
 RoxygenNote: 7.2.3
 Suggests: 
     knitr,
