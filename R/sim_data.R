@@ -80,7 +80,20 @@ sim_data_trees = function(n, p, q, min_x = 0, max_x = 1, trees = 1, ...){
   return(list(y = y, x = x, ome = ome, true_trees = true_trees))
 }
 
-#---------- Simulating missing values ----------#
+#' Simulating missing values from a probit regression model
+#'
+#' @param x regression covariates
+#' @param y regression response
+#' @param include_x logical. Include x in probit model?
+#' @param include_y logical. Include y in probit model?
+#' @param min_missing_prop minimum proportion of missingness
+#' @param max_missing_prop maximum proportion of missingness
+#' @param ... Catches unused arguments
+#'
+#' @return
+#' @export
+#'
+#' @examples
 sim_missing = function(x, y, include_x = FALSE, include_y = FALSE, min_missing_prop = 0.6, max_missing_prop = 0.9, ...){
   p = ncol(y)
   q = ncol(x)
@@ -130,6 +143,21 @@ sim_missing = function(x, y, include_x = FALSE, include_y = FALSE, min_missing_p
   return(list(B = B, m = m, missing_y = y, missing_prop = missing_prop, missing_index = missing_index, obs_index = obs_index, corR = corR))
 }
 
+#' Simulate missing data from a BART model
+#'
+#' @param x regression covariates
+#' @param y regression response
+#' @param trees number of trees
+#' @param include_x logical. Include x in probit model?
+#' @param include_y logical. Include y in probit model?
+#' @param min_missing_prop minimum proportion of missingness
+#' @param max_missing_prop maximum proportion of missingness
+#' @param ... Catches unused arguments
+#'
+#' @return
+#' @export
+#'
+#' @examples
 sim_missing_trees = function(x, y, trees = 1, include_x = FALSE, include_y = TRUE, min_missing_prop = 0.6, max_missing_prop = 0.9, ...){
   p = ncol(y)
   q = ncol(x)

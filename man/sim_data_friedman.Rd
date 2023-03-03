@@ -4,16 +4,16 @@
 \alias{sim_data_friedman}
 \title{Simulate}
 \usage{
-sim_data_friedman(n, p = 1, scale_par = 1, scale_err = 0.5)
+sim_data_friedman(n, p = 1, scale_par = 1, omega_diag = 500)
 }
 \arguments{
 \item{n}{number of observations}
 
 \item{p}{number of responses}
 
-\item{scale_par}{scale parameter}
+\item{scale_par}{scale_par}
 
-\item{scale_err}{scale error}
+\item{omega_diag}{precision ~ rWishart(1, p+1, diag(omega_diag, p))}
 }
 \description{
 Simulate

@@ -1,5 +1,5 @@
 # devtools::install_github("yongchengoh/missBART")
-# library(missBART)
+library(missBART)
 
 data = sim_data_friedman(n = 1000, p = 5)
 y = data$y
