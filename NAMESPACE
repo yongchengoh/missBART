@@ -2,7 +2,7 @@
 
 export(hypers_list)
 export(matrnorm)
-export(missBART.probit)
+export(missBARTprobit)
 export(multi_rMVN)
 export(mvBART)
 export(propose_tree)

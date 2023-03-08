@@ -23,8 +23,8 @@
 #' @examples
 #' x <- matrix(runif(6), ncol = 2)
 #' y <- matrix(runif(6), ncol = 2) %*% matrix(rnorm(4), ncol=2)
-#' missBART.probit(x, y, n_trees = 2, burn = 2, iters = 2, thin = 1, scale = FALSE)
-missBART.probit = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100, thin = 2, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
+#' missBARTprobit(x, y, n_trees = 2, burn = 2, iters = 2, thin = 1, scale = FALSE)
+missBARTprobit = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100, thin = 2, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
                            scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, ...) {
 
   y = as.matrix(y)

@@ -27,7 +27,7 @@ for(j in 1:ncol(y)){
   print(plot)
 }
 
-model1 = missBART.probit(x, y, predict = FALSE)
+model1 = missBARTprobit(x, y, predict = FALSE)
 y_pred = model1$y_pred
 
 mean_y_post = Reduce("+", y_pred)/length(y_pred)
