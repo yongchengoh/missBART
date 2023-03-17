@@ -2,7 +2,6 @@
 #'
 #' @param df dataframe
 #' @param x covariates
-#' @param x_vars vector
 #' @param min_node minimum number of observations that should fall into a single terminal node.
 #' @param max_attempt maximum number of attempts to find a suitable tree
 #' @param i iteration number
@@ -19,8 +18,9 @@
 #' df[1,] <- c(0,0,1,0,1,0,0)
 #' x <- matrix(runif(9), ncol=3)
 #' propose_tree(df, x, seq(ncol(x)), min_node = 1, max_attempt = 1, i = 1)
-propose_tree = function(df, x, x_vars, min_node, max_attempt = 50, i, probit = FALSE, miss_row = NA) {
+propose_tree = function(df, x, min_node, max_attempt = 50, i, probit = FALSE, miss_row = NA) {
   n = nrow(x)
+  x_vars = seq_len(ncol(x))
   if(nrow(df) == 1) {
     #-If tree is only a stump, only grow it.
     MOVE = "GROW"
@@ -53,43 +53,44 @@ propose_tree = function(df, x, x_vars, min_node, max_attempt = 50, i, probit = F
                terminal_nodes = as.numeric(setdiff(row.names(df), df$parent))
                grow_node = sample(terminal_nodes, 1)
                bad_grow_variable = TRUE
-               # while(bad_grow_variable){
-               grow_variable = sample(x_vars, 1)
-               type = class(x[,grow_variable])
-               parent = grow_node # This is NOT the parent node. Used to find the splitting boundary for current splitting variable (depends on previous splits on the same variable)
-               while(df$split_variable[parent] != grow_variable) {
-                 parent = df$parent[parent]
-                 if(parent == 0) {
-                   break
-                 }
-               } #End while(df$split_variable[parent] != grow_variable)
+               while(bad_grow_variable){
+                 grow_variable = sample(x_vars, 1)
+                 type = class(x[,grow_variable])
+                 parent = grow_node # This is NOT the parent node. Used to find the splitting boundary for current splitting variable (depends on previous splits on the same variable)
+                 while(df$split_variable[parent] != grow_variable) {
+                   parent = df$parent[parent]
+                   if(parent == 0) {
+                     break
+                   }
+                 } #End while(df$split_variable[parent] != grow_variable)
 
-               switch(EXPR = type,
-                      "numeric" = {
-                        if(parent != 0) {
-                          lower = ifelse(df$direction[parent] == 0, df$lower[parent], df$split_value[parent])
-                          upper = ifelse(df$direction[parent] == 0, df$split_value[parent], df$upper[parent])
-                        } else {
-                          lower = min(x[,grow_variable], na.rm = TRUE)
-                          upper = max(x[,grow_variable], na.rm = TRUE)
-                        }
-                        new_point = stats::runif(1, lower, upper)
-                      }, "integer" = {
-                        lower = 0
-                        upper = 1
-                        new_point = ifelse(grow_variable %in% df$split_variable, NA, sample(x[,grow_variable], 1))
-                      }, "factor" = {
-                        lower = NA
-                        upper = NA
-                        split_set = setdiff(unique(x[,grow_variable]), unique(df$split_value[df$split_variable==grow_variable]))
-                        new_point = ifelse(length(split_set == 1), NA, sample(split_set, 1)) #setequal(unique(x[,grow_variable]), unique(df$split_value[df$split_variable==grow_variable]))
-                      }) # End switch
-               if(!is.na(new_point)) {bad_grow_variable = FALSE}
-               # } #End while(bad_grow_variable)
+                 switch(EXPR = type,
+                        "numeric" = {
+                          if(parent != 0) {
+                            lower = ifelse(df$direction[parent] == 0, df$lower[parent], df$split_value[parent])
+                            upper = ifelse(df$direction[parent] == 0, df$split_value[parent], df$upper[parent])
+                          } else {
+                            lower = min(x[,grow_variable], na.rm = TRUE)
+                            upper = max(x[,grow_variable], na.rm = TRUE)
+                          }
+                          x_set = x[which(x[,grow_variable] < upper & x[,grow_variable] >= lower), grow_variable]
+                          new_point = ifelse(length(x_set)==0, NA, sample(x_set, 1))  #runif(1, lower, upper)
+                        }, "integer" = {
+                          lower = 0
+                          upper = 1
+                          new_point = ifelse(grow_variable %in% df$split_variable, NA, sample(x[,grow_variable], 1))
+                        }, "factor" = {
+                          #unique(x[,grow_variable])[as.logical(rbern(length(unique(x[,grow_variable]))))]
+                          lower = NA
+                          upper = NA
+                          split_set = setdiff(unique(x[,grow_variable]), unique(df$split_value[df$split_variable==grow_variable]))
+                          new_point = sample(split_set,sample(1:length(split_set), 1)) #ifelse(length(split_set) == 1, NA, sample(split_set, 1)) #setequal(unique(x[,grow_variable]), unique(df$split_value[df$split_variable==grow_variable]))
+                        }) # End switch
+                 if(!is.na(new_point)) {bad_grow_variable = FALSE}
+               } #End while(bad_grow_variable)
              } else { #This is if nrow(df) == 1
-               new_point <- ifelse(class(x[,grow_variable])=="numeric", stats::runif(1, lower, upper), sample(unique(x[,grow_variable]), 1))
+               new_point <- ifelse(class(x[,grow_variable])=="numeric", sample(unique(x[,grow_variable]), 1), sample(unique(x[,grow_variable]), 1))
              }
-             # new_point = sample(x[which(x[,grow_variable]<upper & x[,grow_variable]>=lower),grow_variable], 1)
              new_depth = df$depth[grow_node] + 1
              new_df = rbind(df, c(grow_node, lower, upper, grow_variable, new_point, new_depth, 0), c(grow_node, lower, upper, grow_variable, new_point, new_depth, 1))
            }, PRUNE= {
@@ -137,7 +138,7 @@ propose_tree = function(df, x, x_vars, min_node, max_attempt = 50, i, probit = F
                lower = min(x[,change_variable], na.rm = TRUE)
                upper = max(x[,change_variable], na.rm = TRUE)
              }
-             change_value = stats::runif(1, lower, upper)
+             change_value = sample(x[which(x[,change_variable] < upper & x[,change_variable] >= lower), change_variable], 1) #runif(1, lower, upper)
              # change_value = sample(x[which(x[,change_variable]<upper & x[,change_variable]>=lower),change_variable],1)
              new_df = df
              new_df$lower[new_df$parent == change_node] = lower
@@ -164,7 +165,7 @@ propose_tree = function(df, x, x_vars, min_node, max_attempt = 50, i, probit = F
     change_points = get_change_points(new_df, x)
     empty_terminal = length(unique(change_points)) != length(as.numeric(setdiff(row.names(new_df), new_df$parent)))
     decent_tree = isFALSE(empty_terminal) && all(table(change_points) >= min_node)
-    if(probit & decent_tree) decent_tree = !Reduce(any, lapply(split(miss_row, change_points), function(x) all(isTRUE(x))))
+    if(all(probit, decent_tree)) decent_tree = !Reduce(any, lapply(split(miss_row, change_points), function(x) all(isTRUE(x))))
     # decent_tree = all(tabulate(change_points) >= min_node)
     attempt = attempt + 1
   } # End while loop

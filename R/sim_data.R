@@ -70,7 +70,7 @@ sim_data_trees = function(n, p, q, min_x = 0, max_x = 1, trees = 1, ...){
     n_splits = sample(seq(1,6), 1)
     mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
     for(j in 1:n_splits){
-      new_tree = propose_tree(df1, x, seq(ncol(x)), min_node = 20, max_attempt = 10, i = 2)
+      new_tree = propose_tree(df1, x, min_node = 20, max_attempt = 10, i = 2)
       df1 = new_tree$new_df
     }
     true_trees[[i]] = df1
@@ -189,7 +189,7 @@ sim_missing_trees = function(x, y, trees = 1, include_x = FALSE, include_y = TRU
       n_splits = sample(seq(1,3), 1)
       mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
       for(j in 1:n_splits){
-        new_tree = propose_tree(df2, Y, seq(ncol(Y)), min_node = 20, max_attempt = 10, i = 2)
+        new_tree = propose_tree(df2, Y, min_node = 20, max_attempt = 10, i = 2)
         df2 = new_tree$new_df
       }
       true_trees[[i]] = df2

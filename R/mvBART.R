@@ -134,7 +134,7 @@ mvBART = function(x, y, x_predict = NA, n_trees = 50, burn = 1000, iters = 1000,
 
       ###----- Propose new tree -----###
       df <- accepted_trees[[j]]
-      new_tree <- propose_tree(df, x, x_vars, min_node, max_attempt, i) # Propose new tree for tree j
+      new_tree <- propose_tree(df, x, min_node, max_attempt, i) # Propose new tree for tree j
       new_df <- new_tree$new_df
       change_points <- new_tree$change_points # Get change points for new tree
       decent_tree <- new_tree$decent_tree

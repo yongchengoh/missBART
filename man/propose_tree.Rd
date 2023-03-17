@@ -7,7 +7,6 @@
 propose_tree(
   df,
   x,
-  x_vars,
   min_node,
   max_attempt = 50,
   i,
@@ -19,8 +18,6 @@ propose_tree(
 \item{df}{dataframe}
 
 \item{x}{covariates}
-
-\item{x_vars}{vector}
 
 \item{min_node}{minimum number of observations that should fall into a single terminal node.}
 

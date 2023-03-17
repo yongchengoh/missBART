@@ -215,8 +215,9 @@ update_y_miss_BART = function(x, y, Y, z, z_hat, y_hat, n_trees, R, Omega, missi
 
   proposed_y = y
   proposed_y[missing_index] = stats::rnorm(n_miss, mean = y[missing_index], sd = MH_sd)
-  Y = as.matrix(cbind(x, proposed_y))
-  Y = Y[, which(c(rep(include_x, q), rep(include_y, p)))]
+  # Y = as.matrix(cbind(x, proposed_y))
+  # Y = Y[, which(c(rep(include_x, q), rep(include_y, p)))]
+  Y = probit_predictors(x = x, y = proposed_y, include_x = include_x, include_y = include_y)
   z_hat = matrix(0, nrow=n, ncol=p)
   for(k in 1:n_trees){
     MH_change_id = get_change_points(accepted_class_trees[[k]], Y)

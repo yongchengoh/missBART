@@ -49,7 +49,7 @@ for(i in 1:trees){
   mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p)) 
 
   for(j in 1:n_splits){
-    new_tree = propose_tree(df1, x, seq(ncol(x)), 20, 10, 2)
+    new_tree = propose_tree(df1, x, 20, 10, 2)
     df1 = new_tree$new_df
   }
 
