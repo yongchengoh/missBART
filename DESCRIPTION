@@ -13,7 +13,8 @@ BugReports: https://github.com/yongchengoh/missBART
 Imports: Matrix, 
   CholWishart,
   extraDistr,
-  MASS
+  MASS,
+  purrr
 RoxygenNote: 7.2.3
 Suggests: 
     knitr,

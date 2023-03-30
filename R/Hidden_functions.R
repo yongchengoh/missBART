@@ -180,8 +180,9 @@ get_change_points <- function(df, x) {
         switch(EXPR = type,
                "numeric" = {
                  y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] <= df$split_value[parent]) else which(x[,df$split_variable[parent]] > df$split_value[parent])
-               }, "integer" = {
-                 y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] == df$split_value[parent]) else which(x[,df$split_variable[parent]] != df$split_value[parent])
+                 if(any(is.na(x[,df$split_variable[parent]]))){
+                   if(df$NA_direction[parent] == 1) y_index[[count]] = sort(c(y_index[[count]], which(is.na(x[,df$split_variable[parent]]))))
+                 }
                }, "factor" = {
                  y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] == df$split_value[parent]) else which(x[,df$split_variable[parent]] != df$split_value[parent])
                }) #End switch
@@ -197,8 +198,8 @@ get_change_points <- function(df, x) {
     for(k in 1:length(terminal_obs)){
       change_points[terminal_obs[[k]]] = k
     }
-    max_node = max(unique(change_points))
-    change_points[which(change_points==0)] = sample(c(max_node, max_node - 1), 1)
+    # max_node = max(unique(change_points))
+    # change_points[which(change_points==0)] = sample(c(max_node, max_node - 1), 1)
   }
   return(change_points)
 }

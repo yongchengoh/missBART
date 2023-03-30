@@ -2,7 +2,7 @@
 
 export(hypers_list)
 export(matrnorm)
-export(missBART)
+export(missBART2)
 export(missBARTprobit)
 export(multi_rMVN)
 export(mvBART)
@@ -17,3 +17,4 @@ export(tree_list)
 importFrom(CholWishart,"rInvWishart")
 importFrom(MASS,mvrnorm)
 importFrom(extraDistr,"rinvgamma")
+importFrom(purrr,"rbernoulli")

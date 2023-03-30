@@ -1,27 +1,28 @@
 #' Title
 #'
-#' @param x
-#' @param y
-#' @param x_predict
-#' @param n_trees
-#' @param burn
-#' @param iters
-#' @param thin
-#' @param predict
-#' @param tree_prior_params
-#' @param hypers
-#' @param scale
-#' @param include_x
-#' @param include_y
-#' @param show_progress
-#' @param progress_every
-#' @param ...
+#' @param x covariates
+#' @param y response
+#' @param x_predict out-of-sample covariates. If not specificied, the default is set to NA and no out-of-sample predictions will be made.
+#' @param n_reg_trees number of BART trees
+#' @param n_class_trees number of probit BART trees
+#' @param burn burn-in samples
+#' @param iters post-burn-in samples
+#' @param thin thinning
+#' @param predict make out-of-sample predictions?
+#' @param tree_prior_params prior parameters for BART trees
+#' @param hypers prior parameters for BART parameters
+#' @param scale scale data?
+#' @param include_x Include x in probit model?
+#' @param include_y Include y in probit model?
+#' @param show_progress logical
+#' @param progress_every integer value stating how often to update the progress bar.
+#' @param ... Catches unused arguments
 #'
 #' @return
 #' @export
 #'
 #' @examples
-missBART = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100, thin = 2, predict = TRUE,
+missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20, burn = 100, iters = 100, thin = 2, predict = TRUE,
                     tree_prior_params = tree_list(), hypers = hypers_list(),
                     scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, ...) {
 
@@ -39,9 +40,6 @@ missBART = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100,
   missing_index = which(is.na(y))
   obs_index = which(!is.na(y))
   miss_row = apply(y, 1, function(x) any(is.na(x)))
-
-  m = matrix(1, nrow=n, ncol=p)
-  m[is.na(y)] = 0
 
   if(scale){
     min_y = apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
@@ -90,6 +88,9 @@ missBART = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100,
   reg_moves = NULL
 
   #####-------------------- CREATE STORAGE FOR PROBIT BART --------------------#####
+  m = matrix(1, nrow=n, ncol=p)
+  m[is.na(y)] = 0
+
   R_post = vector(mode = "list", length = 0)
   y_post = vector(mode = "list", length = 0)
   y_pred = vector(mode = "list", length = 0)
@@ -114,9 +115,9 @@ missBART = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100,
   partial_reg = vector(mode = "list", length = n_reg_trees)
 
   #####-------------------- SET INITIAL VALUES FOR REGRESSION BART --------------------#####
-  df = data.frame(matrix(ncol = 7, nrow = 1))
-  colnames(df) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
-  df[1,] = c(0,0,1,0,1,0,0)
+  df = data.frame(matrix(ncol = 8, nrow = 1))
+  colnames(df) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction", "NA_direction")
+  df[1,] <- c(0,0,1,0,1,0,0,NA)
 
   accepted_reg_trees = lapply(seq_len(n_reg_trees), function(x) accepted_reg_trees[[x]] = df)
   reg_change_id = lapply(seq_len(n_reg_trees), function(x) reg_change_id[[x]] = rep(1, n))
@@ -284,7 +285,7 @@ missBART = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100,
     #--Get classBART predictions
     z_hat = z = Reduce("+", class_phi)
     if(p==1){
-      z = matrix(rnorm(n, mean=z, sd=1), ncol=p, byrow=TRUE)
+      z = matrix(stats::rnorm(n, mean=z, sd=1), ncol=p, byrow=TRUE)
     } else {
       z = multi_rMVN(z, chol2inv(PD_chol(new_R)))
     }
@@ -294,7 +295,7 @@ missBART = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100,
 
     if(include_y){ # If include_y==FALSE, then we are assuming MAR. Missing y's can be "imputed" from the model.
       #--Metropolis Hastings step for y_miss--#
-      y_miss = update_y_miss_BART(x = x, y = y, z = z, z_hat = z_hat, y_hat = y_hat, n_trees = n_class_trees, R = new_R, Omega = new_omega, missing_index = missing_index, accepted_class_trees = accepted_class_trees, class_mu_i = class_mu[[i]], include_x = include_x, include_y = include_y, MH_sd = 0.1, Y = Y, m = m)
+      y_miss = update_y_miss_BART(x = x, y = y, z = z, z_hat = z_hat, y_hat = y_hat, n_trees = n_class_trees, R = new_R, Omega = new_omega, missing_index = missing_index, accepted_class_trees = accepted_class_trees, class_mu_i = class_mu[[i]], include_x = include_x, include_y = include_y, MH_sd = 0.1)
       y_miss_accept[i,] = y_miss$accept[missing_index]
       # y_miss = update_y_miss_BART(x = x, y = y, z = z, z_hat = z_hat, y_hat = y_hat, n_trees = n_class_trees, R = new_R, Omega = new_omega, missing_index = missing_index, accepted_class_trees = accepted_class_trees, class_mu_i = class_mu[[i]], include_x = include_x, include_y = include_y, MH_sd = 0.1)
       # y_miss_accept[i,] = rep(y_miss$accept, p)[missing_index]
@@ -307,7 +308,7 @@ missBART = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100,
 
     ###----- Store posterior samples after burn-in, accounting for thinning -----###
     if(i > burn && i%%thin == 0){
-      # y_post = append(y_post, list(y_hat))
+      y_post = append(y_post, list(y_hat))
       pred = multi_rMVN(y_hat, new_omega)
       pred[missing_index] = y[missing_index]
       y_pred = append(y_pred, list(pred))
@@ -325,8 +326,8 @@ missBART = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100,
   if(!predict) new_y_post = NA
 
   return(list(y_post = y_post, omega_post = omega_post,
-              imputed = y, new_y_post = new_y_post, accepted_trees = accepted_trees,
+              imputed = y, new_y_post = new_y_post, accepted_reg_trees = accepted_reg_trees, accepted_class_trees = accepted_class_trees,
               burn = burn, iters = iters, thin = thin,
               max_y = max_y, min_y = min_y,
               y_pred = y_pred))
-} # End missBART
+}

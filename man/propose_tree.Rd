@@ -11,7 +11,8 @@ propose_tree(
   max_attempt = 50,
   i,
   probit = FALSE,
-  miss_row = NA
+  miss_row = NA,
+  cat_list = NA
 )
 }
 \arguments{
@@ -28,6 +29,8 @@ propose_tree(
 \item{probit}{logical. Indicates whether tree is for continuous or binary outcomes.}
 
 \item{miss_row}{index of missing rows}
+
+\item{cat_list}{list of used categorical subset}
 }
 \value{
 A dataframe containing details of a new tree structure
@@ -40,6 +43,6 @@ A function for proposing an updated tree structure
 df <- data.frame(matrix(ncol = 7, nrow = 1))
 colnames(df) <- c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
 df[1,] <- c(0,0,1,0,1,0,0)
-x <- matrix(runif(9), ncol=3)
-propose_tree(df, x, seq(ncol(x)), min_node = 1, max_attempt = 1, i = 1)
+x <- matrix(stats::runif(9), ncol=3)
+propose_tree(df, x, min_node = 1, max_attempt = 1, i = 1)
 }
