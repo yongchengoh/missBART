@@ -325,9 +325,45 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
 
   if(!predict) new_y_post = NA
 
-  return(list(y_post = y_post, omega_post = omega_post,
-              imputed = y, new_y_post = new_y_post, accepted_reg_trees = accepted_reg_trees, accepted_class_trees = accepted_class_trees,
+  return(structure(list(y_post = y_post, omega_post = omega_post,
+              x = x, imputed_y = y, new_y_post = new_y_post, accepted_reg_trees = accepted_reg_trees, accepted_class_trees = accepted_class_trees,
               burn = burn, iters = iters, thin = thin,
               max_y = max_y, min_y = min_y,
-              y_pred = y_pred))
+              y_pred = y_pred), class = "bart"))
 }
+
+# print.bart <- function(bart_out, ...) {
+#   if(!inherits(bart_out, "bart")) stop("x must be of class 'bart'")
+#   y_post = bart_out$y_post
+#   y = bart_out$imputed_y
+#   x = bart_out$x
+#   min_y = bart_out$min_y
+#   min_x = bart_out$min_x
+#
+#   mean_y_post = Reduce("+", y_post)/length(y_post)
+#   mean_y_post = unscale(mean_y_post, min = min_y, max = max_y, std = FALSE)
+#   y = unscale(y, min = min_y, max = max_y, std = FALSE)
+#
+#   # for(i in 1:p){
+#   #   for(j in c(1,6,7,16,22,25)){
+#   #     print(ggplot(data = data.frame(x=x[,j], y=y[,i], m=m[,i]), aes(x, y, color=as.factor(m))) + geom_point(size = 0.9) + ylab(colnames(y)[i]) + xlab(colnames(x)[j]))
+#   #   }
+#   # }
+#
+#   bart_plot = list()
+#   for(i in 1:p){
+#     plot_data = data.frame(true = y[which(m[,i]==1),i], pred = mean_y_post[which(m[,i]==1),i])
+#     min = min(plot_data)
+#     max = max(plot_data)
+#     cheat = data.frame(y_seq = seq(min, max, length=nrow(plot_data)))
+#     bart_plot = ggplot(plot_data, aes(true, pred)) + geom_point() + geom_line(data=cheat, aes(y_seq, y_seq), colour="black", size=0.1)
+#     print(bart_plot)
+#   }
+#
+#   for(i in 1:p){
+#     # for(j in c(1,6,7,16,22,25)){
+#       # print(ggplot(data.frame(x=x[,j], y=mean_y_post[,i], m=m[,i]), aes(x, y, colour=factor(m))) + geom_point())
+#       print(ggplot(data.frame(y = mean_y_post[,i], m = factor(m[,i])), aes(x = y, colour=m)) + geom_histogram(fill="white") + facet_grid(m ~ .))
+#     # }
+#   }
+# }

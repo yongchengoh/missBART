@@ -273,6 +273,16 @@ tree_priors <- function(nodes, parents, depth, prior_alpha, prior_beta) {
 }
 
 # Unscale data (data was scaled to [-0.5,0.5])
+#' Title
+#'
+#' @param scaled_val matrix of scaled values
+#' @param min original min. value
+#' @param max original max. value
+#'
+#' @return
+#' @export
+#'
+#' @examples
 unscale = function(scaled_val, min, max){
   p = ncol(scaled_val)
   n = nrow(scaled_val)
