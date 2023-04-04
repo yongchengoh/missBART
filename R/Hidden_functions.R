@@ -177,15 +177,19 @@ get_change_points <- function(df, x) {
         #Add in if/else for type of variable (numeric, integer, categorical)
         #Add in split if missing (not if m==0/1)
         type = class(x[,df$split_variable[parent]])
-        switch(EXPR = type,
-               "numeric" = {
-                 y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] <= df$split_value[parent]) else which(x[,df$split_variable[parent]] > df$split_value[parent])
-                 if(any(is.na(x[,df$split_variable[parent]]))){
-                   if(df$NA_direction[parent] == 1) y_index[[count]] = sort(c(y_index[[count]], which(is.na(x[,df$split_variable[parent]]))))
-                 }
-               }, "factor" = {
-                 y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] == df$split_value[parent]) else which(x[,df$split_variable[parent]] != df$split_value[parent])
-               }) #End switch
+        # switch(EXPR = type,
+        #        "numeric" = {
+        #          y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] <= df$split_value[parent]) else which(x[,df$split_variable[parent]] > df$split_value[parent])
+        #          if(any(is.na(x[,df$split_variable[parent]]))){
+        #            if(df$NA_direction[parent] == 1) y_index[[count]] = sort(c(y_index[[count]], which(is.na(x[,df$split_variable[parent]]))))
+        #          }
+        #        }, "factor" = {
+        #          y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] == df$split_value[parent]) else which(x[,df$split_variable[parent]] != df$split_value[parent])
+        #        }) #End switch
+        y_index[[count]] = if(df$direction[parent] == 0) which(x[,df$split_variable[parent]] <= df$split_value[parent]) else which(x[,df$split_variable[parent]] > df$split_value[parent])
+        if(any(is.na(x[,df$split_variable[parent]]))){
+          if(df$NA_direction[parent] == 1) y_index[[count]] = sort(c(y_index[[count]], which(is.na(x[,df$split_variable[parent]]))))
+        }
         parent <- df$parent[parent]
         count <- count + 1
       }

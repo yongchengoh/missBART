@@ -34,7 +34,6 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
       x = cbind(x, 1-as.integer(is.na(x[,l])))
     }
   }
-
   if(is.na(x_predict)) predict = FALSE
 
   missing_index = which(is.na(y))
