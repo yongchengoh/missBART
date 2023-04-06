@@ -26,15 +26,16 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
                     tree_prior_params = tree_list(), hypers = hypers_list(),
                     scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, ...) {
 
-
+  if(is.na(x_predict)) predict = FALSE
   y = as.matrix(y)
   x = as.matrix(x)
+  if(predict) x_predict = as.matrix(x_predict)
   for(l in 1:ncol(x)){
     if(any(is.na(x[,l]))){
       x = cbind(x, 1-as.integer(is.na(x[,l])))
+      x_predict = cbind(x_predict, 1-as.integer(is.na(x_predict[,l])))
     }
   }
-  if(is.na(x_predict)) predict = FALSE
 
   missing_index = which(is.na(y))
   obs_index = which(!is.na(y))
