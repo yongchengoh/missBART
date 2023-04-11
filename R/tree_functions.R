@@ -42,7 +42,7 @@ propose_tree = function(df, x, min_node, max_attempt = 50, i, probit = FALSE, mi
     MOVE = sample(c("GROW", "PRUNE"), 1)
   } else {
     # MOVE = sample(c("GROW", "PRUNE", "CHANGE", "SWAP"), 1)
-    MOVE = sample(c("GROW", "PRUNE"), 1)
+    MOVE = sample(c("GROW", "PRUNE", "CHANGE"), 1)
   } # End grow/prune/change/swap
 
   decent_tree = FALSE
@@ -147,11 +147,17 @@ propose_tree = function(df, x, min_node, max_attempt = 50, i, probit = FALSE, mi
              }
              change_value = stats::runif(1, lower, upper)
              # change_value = sample(x[which(x[,change_variable]<upper & x[,change_variable]>=lower),change_variable],1)
+             if(any(is.na(x[,change_variable]))) {
+               NA_split_direc = sample(c(0,1), 2)
+             } else {
+               NA_split_direc = rep(NA, 2)
+             }
              new_df = df
              new_df$lower[new_df$parent == change_node] = lower
              new_df$upper[new_df$parent == change_node] = upper
              new_df$split_variable[new_df$parent == change_node] = change_variable
              new_df$split_value[new_df$parent == change_node] = change_value
+             new_df$NA_direction[new_df$parent == change_node] = NA_split_direc
              if(change_node == 1) {
                new_df$split_variable[change_node] = change_variable
              }
@@ -168,7 +174,6 @@ propose_tree = function(df, x, min_node, max_attempt = 50, i, probit = FALSE, mi
              new_df[which(df$parent == swap_node_child),  2:5] = df[df$parent == swap_node_parent, 2:5]
            } # End SWAP
     ) # End switch
-
     change_points = get_change_points(new_df, x)
     empty_terminal = length(unique(change_points)) != length(as.numeric(setdiff(row.names(new_df), new_df$parent)))
     decent_tree = isFALSE(empty_terminal) && all(table(change_points) >= min_node)

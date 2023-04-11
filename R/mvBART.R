@@ -77,9 +77,9 @@ mvBART = function(x, y, x_predict = NA, n_trees = 50, burn = 1000, iters = 1000,
   partial_res <- matrix(nrow = n, ncol = p)
 
   #####-------------------- SET INITIAL VALUES FOR BART --------------------#####
-  df <- data.frame(matrix(ncol = 7, nrow = 1))
-  colnames(df) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
-  df[1,] <- c(0,0,1,0,1,0,0)
+  df = data.frame(matrix(ncol = 8, nrow = 1))
+  colnames(df) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction", "NA_direction")
+  df[1,] <- c(0,0,1,0,1,0,0,NA)
 
   accepted_trees <- lapply(seq_len(n_trees), function(x) accepted_trees[[x]] = df)
   change_id <- lapply(seq_len(n_trees), function(x) change_id[[x]] = rep(1, n))
