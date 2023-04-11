@@ -26,10 +26,9 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
                     tree_prior_params = tree_list(), hypers = hypers_list(),
                     scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, ...) {
 
-  if(is.na(x_predict)) predict = FALSE
   y = as.matrix(y)
   x = as.matrix(x)
-  if(predict) x_predict = as.matrix(x_predict)
+  x_predict = as.matrix(x_predict)
   for(l in 1:ncol(x)){
     if(any(is.na(x[,l]))){
       x = cbind(x, 1-as.integer(is.na(x[,l])))
@@ -46,7 +45,6 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
     max_y = apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
     y = t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
     if(nrow(y)==1) y = t(y)
-    if(predict) y_predict = t(apply(sweep(y_predict, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
   }
 
   #####-------------------- GET PARAMETERS --------------------#####
