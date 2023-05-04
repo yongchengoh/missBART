@@ -1,0 +1,328 @@
+---
+title: "Plant Data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list=ls())
+library(ggplot2)
+library(CholWishart) #multivariate gamma dist.
+library(reshape2)
+library(extraDistr)
+library(gridExtra)
+library(readxl)
+devtools::load_all()
+```
+
+```{r}
+set.seed(54321234)
+
+data = read_excel("Maire_dataset_for_Andrew.xlsx", sheet = "Data")
+head(data)  
+y = log(data[, c("SLA", "Aarea",    "Narea",    "Parea",    "Gs")])
+# x = data[, c("PPTmean", "PPTmin",   "PPTmax",   "PPTcv", "PPTseason",   "RH",   "TMPmean", "TMPmin", "TMPmax", "TMPrange", "TMPiso", "TMP0gs",  "TMP5gs",   "TMP0nb",   "TMP5nb",   "SUNmean", "SUNmin", "SUNmax", "SUNrange", "PAR0", "PAR5", "RAD",   "PETf", "PETq", "Mif", "Miq")]
+
+x = data[, which(colnames(data)=="PPTmean"):ncol(data)]
+# x = mice::ampute(x)$amp
+# colSums(is.na(x))
+
+pattern = mice::md.pattern(y, rotate.names = TRUE)
+```
+
+### k-fold cross validation:
+```{r}
+k = 5
+batch_size = c(rep(floor(nrow(data)/k), k-1), floor(nrow(data)/k) + (nrow(data)%%k))
+rand_id = sample(seq_len(nrow(data)), nrow(data))
+batch_id = split(rand_id, rep(1:k, batch_size))
+
+rmse_train = matrix(nrow = k, ncol = ncol(y))
+rmse_test = matrix(nrow = k, ncol = ncol(y))
+
+rmse_train2 = matrix(nrow = k, ncol = ncol(y))
+rmse_test2 = matrix(nrow = k, ncol = ncol(y))
+```
+
+# CV missBART2
+```{r}
+for(i in seq_along(batch_size)){
+  cat("missBART2", "\n")
+  cat("Performing cross-validation for Batch ", i, "\n")
+  test_index = batch_id[[i]]
+  x_test = x[test_index,]
+  x_train = x[-test_index,]
+  y_test = y[test_index,,drop=FALSE]
+  y_train = y[-test_index,,drop=FALSE]
+  
+  missing_id = which(is.na(y_train))
+  missing_id_test = which(is.na(y_test))
+  
+  BART = missBART2(x = x_train, y = y_train, x_predict = x_test, n_reg_trees = 120, n_class_trees = 90, 
+                   burn = 500, iters = 500, thin = 2, 
+                   predict = TRUE, show_progress = TRUE)
+  
+  mean_y_post = Reduce("+", BART$y_post)/length(BART$y_post)
+  mean_y_post = unscale(mean_y_post, min = BART$min_y, max = BART$max_y)
+  
+  mean_new_y_post = Reduce("+", BART$new_y_post)/length(BART$new_y_post)
+  mean_new_y_post = unscale(mean_new_y_post, min = BART$min_y, max = BART$max_y)
+  
+  for(j in 1:ncol(y)){
+    missing_row_train = which(is.na(y_train[,j]))
+    missing_row_test = which(is.na(y_test[,j]))
+    rmse_train[i,j] = ifelse(length(missing_row_train)==0, 
+                              sqrt(sum((y_train[, j] - mean_y_post[, j])^2)/nrow(y_train[, j])),
+                              sqrt(sum((y_train[-missing_row_train, j] - mean_y_post[-missing_row_train, j])^2)/nrow(y_train[-missing_row_train, j]))) 
+    rmse_test[i, j] = ifelse(length(missing_row_test)==0, 
+                              sqrt(colSums((y_test[, j] - mean_new_y_post[, j])^2)/nrow(y_test[, j])),
+                              sqrt(colSums((y_test[-missing_row_test, j] - mean_new_y_post[-missing_row_test, j])^2)/nrow(y_test[-missing_row_test, j]))) 
+    
+    plot1 = ggplot(data = data.frame(y = y_train[-missing_row_train, j,drop(TRUE)], y_hat = mean_y_post[-missing_row_train, j]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_y_post[missing_row_train, j,drop=FALSE]), aes(x = mean_y_post[missing_row_train, j,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste(colnames(y)[j]," - missBART2: Training batch ", i)) + geom_abline(intercept = 0)
+  
+  plot2 = ggplot(data = data.frame(y = y_test[-missing_row_test, j,drop(TRUE)], y_hat = mean_new_y_post[-missing_row_test, j]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_new_y_post[missing_row_test, j,drop=FALSE]), aes(x = mean_new_y_post[missing_row_test, j,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste(colnames(y)[j], " - missBART2: Testing batch ", i)) + geom_abline(intercept = 0)
+  
+  grid.arrange(plot1, plot2, ncol = 2, newpage = TRUE)
+  }
+  
+  # cat("\n")
+  # cat("\n")
+}
+
+# plant = missBART2(x = x, y = y, x_predict = x_predict, n_reg_trees = 90, n_class_trees = 50, burn = 200, iters = 500, thin = 2)
+```
+
+# CV missBARTprobit
+```{r}
+for(i in seq_along(batch_size)){
+  cat("missBARTprobit", "\n")
+  cat("Performing cross-validation for Batch ", i, "\n")
+  test_index = batch_id[[i]]
+  x_test = x[test_index,]
+  x_train = x[-test_index,]
+  y_test = y[test_index,,drop=FALSE]
+  y_train = y[-test_index,,drop=FALSE]
+  
+  missing_id = which(is.na(y_train))
+  missing_id_test = which(is.na(y_test))
+  
+  BART = missBARTprobit(x = x_train, y = y_train, x_predict = x_test, n_trees = 120, 
+                   burn = 500, iters = 500, thin = 2, 
+                   predict = TRUE, show_progress = TRUE)
+  
+  mean_y_post = Reduce("+", BART$y_post)/length(BART$y_post)
+  mean_y_post = unscale(mean_y_post, min = BART$min_y, max = BART$max_y)
+  
+  mean_new_y_post = Reduce("+", BART$new_y_post)/length(BART$new_y_post)
+  mean_new_y_post = unscale(mean_new_y_post, min = BART$min_y, max = BART$max_y)
+  
+  for(j in 1:ncol(y)){
+    missing_row_train = which(is.na(y_train[,j]))
+    missing_row_test = which(is.na(y_test[,j]))
+    rmse_train2[i,j] = ifelse(length(missing_row_train)==0, 
+                              sqrt(sum((y_train[, j] - mean_y_post[, j])^2)/nrow(y_train[, j])),
+                              sqrt(sum((y_train[-missing_row_train, j] - mean_y_post[-missing_row_train, j])^2)/nrow(y_train[-missing_row_train, j]))) 
+    rmse_test2[i, j] = ifelse(length(missing_row_test)==0, 
+                              sqrt(colSums((y_test[, j] - mean_new_y_post[, j])^2)/nrow(y_test[, j])),
+                              sqrt(colSums((y_test[-missing_row_test, j] - mean_new_y_post[-missing_row_test, j])^2)/nrow(y_test[-missing_row_test, j]))) 
+    
+    plot1 = ggplot(data = data.frame(y = y_train[-missing_row_train, j,drop(TRUE)], y_hat = mean_y_post[-missing_row_train, j]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_y_post[missing_row_train, j,drop=FALSE]), aes(x = mean_y_post[missing_row_train, j,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste(colnames(y)[j]," - missBARTprobit: Training batch ", i)) + geom_abline(intercept = 0)
+  
+  plot2 = ggplot(data = data.frame(y = y_test[-missing_row_test, j,drop(TRUE)], y_hat = mean_new_y_post[-missing_row_test, j]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_new_y_post[missing_row_test, j,drop=FALSE]), aes(x = mean_new_y_post[missing_row_test, j,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste(colnames(y)[j], " - missBARTprobit: Testing batch ", i)) + geom_abline(intercept = 0)
+  
+  grid.arrange(plot1, plot2, ncol = 2, newpage = TRUE)
+  }
+  
+  # cat("\n")
+  # cat("\n")
+}
+
+```
+
+
+```{r}
+mean_y_post = Reduce("+", plant$y_pred)/length(plant$y_pred)
+mean_y_post = unscale(mean_y_post, min = plant$min_y, max = plant$max_y)
+
+colours = c("#FD7446FF", "#709AE1FF", "#1A9993FF", "#FD8CC1FF", "#71D0F5FF", "#FED439FF")
+plant_plot = vector(mode = "list", length = ncol(y))
+for(j in 1:ncol(y)){
+  missing_y = which(is.na(y[,j]))
+  plot_data = data.frame(true = unlist(y[-missing_y,j]), pred = mean_y_post[-missing_y,j])
+  min = min(plot_data)
+  max = max(plot_data)
+  cheat = data.frame(y_seq = seq(min, max, length=nrow(plot_data)))
+  plant_plot[[j]] = ggplot(plot_data, aes(true, pred)) + geom_point(colour=colours[j], size = 0.5) + geom_line(data=cheat, aes(y_seq, y_seq), colour="black", size=0.1) + theme_bw() +
+  ylab("Predicted") +
+  xlab("Data") +
+  ggtitle(paste(colnames(y)[j]))
+  print(plant_plot[[j]])
+}
+
+plant_hist = vector(mode = "list", length = ncol(y))
+m = matrix(1, nrow = nrow(y), ncol = ncol(y))
+m[which(is.na(y))] = 0
+# obs_mean = vector(length = p)
+for(j in 1:ncol(y)){
+  # for(j in c(1,6,7,16,22,25)){
+    # print(ggplot(data.frame(x=x[,j], y=mean_y_post[,j], m=m[,j]), aes(x, y, colour=factor(m))) + geom_point())
+  facet_labels = c("Missing", "Observed")
+  names(facet_labels) = c('0', '1')
+  obs_mean = mean(mean_y_post[which(m[,j]==1),j])
+  miss_mean = mean(mean_y_post[which(m[,j]==0),j])
+  # print(obs_mean)
+  plant_hist[[j]] = ggplot(data.frame(y = mean_y_post[,j], m = factor(m[,j]), obs_mean = rep(obs_mean, n), miss_mean = rep(miss_mean, n)), aes(x = y, colour = m, fill = m)) + 
+          geom_vline(aes(xintercept = mean(obs_mean)), color="black", linetype="dashed", size=0.5) +
+          geom_vline(aes(xintercept = mean(miss_mean)), color=colours[6], linetype="dashed", size=0.5) +
+          geom_histogram(bins = 40, aes(y=..density..)) +
+          geom_density(alpha=.2) +
+          theme_bw() +
+          ggtitle(paste(colnames(y)[j])) +
+          scale_color_manual(name = "", labels = c("Missing", "Observed"), values=c(colours[6], colours[j])) +
+          scale_fill_manual(name = "", labels = c("Missing", "Observed"), values=c(colours[6], colours[j])) +
+          facet_grid(m ~ ., labeller = as_labeller(facet_labels)) +
+          theme(legend.position="none")
+          # facet_grid(m ~ .))
+  print(plant_hist[[j]])
+# }
+}
+
+grid.arrange(plant_hist[[1]], plant_hist[[2]], plant_hist[[3]], plant_hist[[4]], plant_hist[[5]], ncol=3)
+
+sub_B = list()
+for(i in 1:length(B_post)){
+  sub_B = append(sub_B, list(as.matrix(B_post[[i]][(q+2):(p+q+1),])))
+}
+
+plot_posterior(, B_post)
+plot_posterior(, sub_B)
+
+# plant_plot = list()
+# for(i in 1:5){
+#   for(j in c(1,6,7,16,22,25)){
+#     # plant_plot = append(plant_plot, list(ggplot(data = data.frame(x=x[,j], y=y[,i], m=m[,i]), aes(x, y, color=as.factor(m))) + geom_point(size = 0.9) + ylab(colnames(y)[i]) + xlab(colnames(x)[j])))
+#     print(
+#       ggplot(data = data.frame(x=x[,j], y=y[,i], m=m[,i]), aes(x, y, color=as.factor(m))) + geom_point(size = 0.9) + 
+#         ylab(colnames(y)[i]) + 
+#         xlab(colnames(x)[j]) + 
+#         scale_colour_manual(name = "", labels = c("Missing", "Observed"), values = c(colours[6], colours[5])) +
+#         theme_bw()
+#       ) #End print
+#   }
+# }
+```
+
+```{r}
+# colnames(rmse_train) = colnames(rmse_test) = colnames(rmse_train2) = colnames(rmse_test2) = colnames(y)
+
+#RMSE for testing set
+rmse_data = data.frame("missBART2_test" = t(rmse_test), "missBARTprobit_test" = t(rmse_test2), "y_var" = factor(colnames(y), levels = colnames(y)))
+# rmse_data = data.frame("missBART2_train" = t(rmse_train), "missBART2_test" = t(rmse_test), "missBARTprobit_train" = t(rmse_train2), "missBARTprobit_test" = t(rmse_test2), "y_var" = as.factor(colnames(y)))
+melted_data = melt(rmse_data, id.vars = "y_var")
+melted_data$model = c(rep("missBART2", k*ncol(y)), rep("missBARTprobit", k*ncol(y)))
+melted_data$missprop = rep(colSums(is.na(y))/nrow(data), nrow(melted_data)/ncol(y))
+
+# colours = c("#FD7446FF", "#709AE1FF", "#1A9993FF", "#FD8CC1FF", "#71D0F5FF", "#FED439FF") 
+# orange, violet, teal, pink, lightblue, yellow
+colours = c("#709AE1FF", "#FD8CC1FF")
+
+rmseplot1 = ggplot(melted_data, aes(x = y_var, y = value, colour = factor(model), group = variable)) + geom_point(alpha = 0.8) + geom_line(alpha = 0.8) + scale_color_manual(name = "", values=colours) + theme_bw() + ggtitle("5-fold cross validation RMSE values (validation set)") + xlab("Response Variables") + ylab("RMSE values") 
+
+rmseplot2 = ggplot(melted_data, aes(x = y_var, y = value)) + geom_boxplot(aes(fill = factor(model)), outlier.alpha = 0.5, outlier.size = 0.5) + scale_fill_manual(name = "", values = colours) + theme_bw() + ggtitle("5-fold cross validation RMSE values (validation set)") + xlab("Response Variables") + ylab("RMSE values") #+ geom_point(aes(x = y_var, y = missprop), colour = "black", size = 0.5, shape = 10) + ylim(0, 1)
+
+grid.arrange(rmseplot1, rmseplot2, newpage = TRUE)
+
+```
+
+```{r}
+save.image("Plant_imputation_missBART.RData")
+```
+
+```{r}
+split_vars = c()
+for(i in seq_len(length(accepted_class_trees))){
+  split_vars = append(split_vars, unique(accepted_class_trees[[i]][,4]))
+}
+plot(table(split_vars))
+library(reshape2)
+gg_data = reshape2::melt(table(split_vars))
+gg_data$split_vars = c(colnames(x), colnames(y))[gg_data$split_vars]
+gg_data$response = as.integer(gg_data$split_vars %in% colnames(y))
+ggplot(data = gg_data, aes(split_vars, value, fill = factor(response))) + geom_col() + coord_flip()
+```
+
+```{r}
+library(BART)
+BART_pkg_plot = list()
+# sig = vector(length = p)
+BART_pkg = vector(mode = "list", length = p)
+
+for(j in 1:p){
+  observed = which(m[,j]==1)
+  BART_pkg[[j]] = gbart(x.train = x[observed,], y.train = y[observed,j,drop=FALSE], ndpost = iters, nskip = burn, ntree = n_trees, keepevery = thin)
+}
+y_original = y
+
+for(j in 1:p){
+  # Plot train predictions
+  y_hat = BART_pkg[[j]]$yhat.train.mean
+  # sig[j] = BART_pkg$sigma.mean
+  observed = which(m[,j]==1)
+  plot_data = data.frame(y_original = y_original[observed,j], y = y_hat)
+  plot = ggplot(plot_data, aes(y_original, y)) + 
+    geom_point(size=1, colour="mediumaquamarine", shape = 19, aes(alpha="")) + 
+    scale_alpha_manual(values = 1) +
+    theme_minimal() +
+    ylab(paste("Predicted Y",j,sep="")) +
+    xlab(paste("Data Y",j,sep="")) +
+    ggtitle("Complete Cases with gbart") +
+    geom_line(data=cheat[[j]], aes(y_seq, y_seq), colour="black", size=0.1) +
+    #theme(legend.position="right", plot.title = element_text(size = 38), axis.title.x = element_text(size = 30), axis.title.y = element_text(size = 30), legend.text = element_text(size = 28), legend.key.size = unit(2, 'cm')) +
+    guides(color = guide_legend(override.aes = list(size = 6)))
+  BART_pkg_plot = append(BART_pkg_plot, list(plot))
+  print(plot)
+  # print(ggplot(data=data.frame(y=y_hat, x=(y_train[,j])), aes(x,y)) + geom_point(size=0.7) + ylab("Mean Predictions") + xlab(paste("Y",j,sep="")) + geom_abline(slope=1,intercept = 0) + ggtitle("In-sample Predictions") )
+
+}
+```
+
+
+```{r}
+pdf(file = "/users/research/yongchen/GibbsSampling/Tree Based Model/VIBASS5.pdf",
+    width = 13, # The width of the plot in inches
+    height = 9) # The height of the plot in inches
+grid.arrange(BART_probit_plot[[1]], BART_pkg_plot[[1]], BART_probit_plot[[2]], BART_pkg_plot[[2]])
+dev.off()
+
+pdf(file = "/users/research/yongchen/GibbsSampling/Tree Based Model/VIBASS5_2.pdf",
+    width = 13, # The width of the plot in inches
+    height = 9) # The height of the plot in inches
+grid.arrange(BART_probit_plot[[1]], BART_probit_facet[[1]], BART_probit_plot[[2]], BART_probit_facet[[2]])
+dev.off()
+# BART_probit_facet[[j]]
+```
+
+
+```{r}
+save.image("~/GibbsSampling/Tree Based Model/Multivariate_missingBART_new.RData")
+```
+
+```{r}
+Y = cbind(rep(1,n), y_original)
+Sigma = rInvWishart(1, 100, t(z-Y%*%B)%*%(z-Y%*%B) + t(B)%*%B)[,,1]
+D_inv = diag(1/sqrt(diag(Sigma)))
+D_inv %*% Sigma %*% D_inv
+corR
+
+test = list()
+for(i in 1:1000){
+  test = append(test, list(update_z(x,y_original,z_mod,m,B,corR,include_x = include_x))) 
+}
+post_test = Reduce("+", test)/length(test)
+plot(post_test[,1], z_mod[,1])
+```
+
+

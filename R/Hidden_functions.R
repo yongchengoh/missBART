@@ -296,3 +296,15 @@ unscale = function(scaled_val, min, max){
   }
   return(unscaled)
 }
+
+pdp_param_mat_list = function(x, y_range = c(-0.5, 0.5), grid_len = 20, intercept = FALSE){ # Returns a list of size n (n pdp lines)
+  y_grid = seq(y_range[1], y_range[2], length = grid_len)
+  n = nrow(x)
+  q = ncol(x)
+  param_mat_list = vector(mode = "list", length = n)
+  for(i in 1:n){
+    param_mat_list[[i]] = cbind(matrix(rep(x[i,], grid_len), ncol = q, byrow = TRUE), y_grid)
+    if(intercept) param_mat_list[[i]] = cbind(rep(1, grid_len), param_mat_list[[i]])
+  }
+  return(param_mat_list)
+}

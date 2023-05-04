@@ -22,17 +22,21 @@
 #' @export
 #'
 #' @examples
-missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20, burn = 100, iters = 100, thin = 2, predict = TRUE,
+missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20, burn = 100, iters = 100, thin = 2, predict = TRUE,
                     tree_prior_params = tree_list(), hypers = hypers_list(),
-                    scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, ...) {
+                    scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, ...) {
 
+  if(is.null(x_predict)) predict = FALSE
   y = as.matrix(y)
   x = as.matrix(x)
-  x_predict = as.matrix(x_predict)
+  if(!is.null(x_predict)) x_predict = as.matrix(x_predict)
   for(l in 1:ncol(x)){
     if(any(is.na(x[,l]))){
       x = cbind(x, 1-as.integer(is.na(x[,l])))
-      x_predict = cbind(x_predict, 1-as.integer(is.na(x_predict[,l])))
+      if(predict) {
+        x_predict = cbind(x_predict, 1-as.integer(is.na(x_predict[,l])))
+        colnames(x_predict) = colnames(x)
+      }
     }
   }
 
@@ -132,7 +136,6 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
   accepted_class_trees = lapply(seq_len(n_class_trees), function(x) accepted_class_trees[[x]] = df)
   class_change_id = lapply(seq_len(n_class_trees), function(x) class_change_id[[x]] = rep(1, n))
 
-  # new_omega = diag(1,p) #drop(rWishart(1, alpha, V)) #drop(rWishart(1, alpha, diag(1,p)))
   class_mu[[1]] = sapply(seq_len(n_class_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = kappa_class*diag(p))))
   class_phi = lapply(seq_len(n_class_trees), function(x) rep(class_mu[[1]][[x]], n))
 
@@ -154,6 +157,14 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
     reg_phi_pred = vector(mode = "list", length = n_reg_trees)
     n_new = nrow(x_predict)
     new_y_post = vector(mode = "list", length = 0)
+  }
+
+  if(p==1 & make_pdp){
+    #####----- PDP PLOT -----#####
+    pdp_list = pdp_param_mat_list(x = x, intercept = FALSE, y_range = pdp_range)
+    pdp_phi = matrix(0, nrow = n, ncol = 20)
+    pdp_out = vector(mode = "list", length = total_iters)
+    pdp_m = matrix(rep(m, 20), ncol=20)
   }
 
   #####----- PROGRESS BAR -----#####
@@ -278,18 +289,33 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
       L_phi = L_mu[class_change_id[[k]],, drop=FALSE]
       class_mu[[i]][[k]] = L_mu
       class_phi[[k]] = L_phi # Used to calculate partial res.
+
+      if(p==1 & make_pdp){
+        ###----- PDP -----###
+        pdp_change_list = lapply(pdp_list, function(pdp) get_change_points(accepted_class_trees[[k]], rbind(Y, pdp))[-c(1:n)])
+        pdp_phi = pdp_phi + Reduce(rbind, lapply(pdp_change_list, function(x) L_mu[x]))
+      }
     }
 
     #--Get classBART predictions
     z_hat = z = Reduce("+", class_phi)
     if(p==1){
       z = matrix(stats::rnorm(n, mean=z, sd=1), ncol=p, byrow=TRUE)
+
+      if(make_pdp){
+        pdp_z = matrix(stats::rnorm(prod(dim(pdp_phi)), mean=pdp_phi, sd=1), ncol=ncol(pdp_phi))
+        pdp_z[intersect(which(pdp_z<0), which(pdp_m==1))] = 0
+        pdp_z[intersect(which(pdp_z>=0), which(pdp_m==0))] = 0
+        pdp_out[[i]] = pdp_z
+      }
     } else {
       z = multi_rMVN(z, chol2inv(PD_chol(new_R)))
     }
     z[intersect(which(z<0), which(m==1))] = 0
     z[intersect(which(z>=0), which(m==0))] = 0
     kappa_class = sim_kappa(mu = class_mu[[i]], a = 16, b = 1/n_class_trees)
+
+
 
     if(include_y){ # If include_y==FALSE, then we are assuming MAR. Missing y's can be "imputed" from the model.
       #--Metropolis Hastings step for y_miss--#
@@ -298,8 +324,10 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
       # y_miss = update_y_miss_BART(x = x, y = y, z = z, z_hat = z_hat, y_hat = y_hat, n_trees = n_class_trees, R = new_R, Omega = new_omega, missing_index = missing_index, accepted_class_trees = accepted_class_trees, class_mu_i = class_mu[[i]], include_x = include_x, include_y = include_y, MH_sd = 0.1)
       # y_miss_accept[i,] = rep(y_miss$accept, p)[missing_index]
       y[missing_index] = y_miss$y[missing_index]
+      y_hat[missing_index] = y_miss$y[missing_index]
     } else {
       y[missing_index] = multi_rMVN(y_hat, new_omega)[missing_index]
+      y_hat[missing_index] = multi_rMVN(y_hat, new_omega)[missing_index]
     }
 
     Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = FALSE)
@@ -319,6 +347,8 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
       }
     }
 
+    if(p>1 || !make_pdp) pdp_out = NA
+
   } # End of i iterations
 
   if(!predict) new_y_post = NA
@@ -327,7 +357,7 @@ missBART2 = function(x, y, x_predict = NA, n_reg_trees = 20, n_class_trees = 20,
               x = x, imputed_y = y, new_y_post = new_y_post, accepted_reg_trees = accepted_reg_trees, accepted_class_trees = accepted_class_trees,
               burn = burn, iters = iters, thin = thin,
               max_y = max_y, min_y = min_y,
-              y_pred = y_pred), class = "bart"))
+              y_pred = y_pred, pdp_out = pdp_out), class = "bart"))
 }
 
 # print.bart <- function(bart_out, ...) {

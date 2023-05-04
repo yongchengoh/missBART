@@ -1,0 +1,297 @@
+---
+title: "Non-Monotone Missingness: missBARTprobit v.s. missBART2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Simulated Data - Friedman, univariate response
+```{r}
+rm(list=ls())
+devtools::load_all()
+set.seed(12345679)
+library(ggplot2)
+library(reshape2)
+
+#----- SIMULATE COMPLETE DATA
+n = 500
+p = 1
+# data = sim_data_friedman(n = n, p = p)
+data = mlbench::mlbench.friedman1(n)
+# true_trees_data = data$true_trees
+y = y_original = as.matrix(data$y, ncol=p)
+x = data$x
+
+# ome = data$ome
+
+#----- SIMULATE MISSINGNESS IN DATA
+missing = sim_missing_trees(x = x, y = y, include_x = FALSE, include_y = TRUE, max_missing_prop = 0.99, min_node = 50, min_missing_prop = 0.5, trees = 2)
+paste("Proportion of data observed: ", missing$missing_prop*100, "%")
+paste("Proportion of data missing: ", (1-missing$missing_prop)*100, "%")
+y = missing$missing_y
+missing_index = missing$missing_index
+obs_index = missing$obs_index
+m = missing$m
+p_m = pnorm(missing$z)
+
+#----- PLOT DATA
+for(j in 1:ncol(y)){
+  plot = ggplot(data.frame(x = x[,1], y = y_original[,j]), aes(x, y, color=factor(m[,j]))) + geom_point() + ggtitle(paste("In-sample y", j, sep=""))
+  print(plot)
+}
+
+plot(y_original, p_m)
+plot(y_original, m)
+
+#########
+total_n = nrow(y)
+train_n = round(total_n * 0.8)
+test_n = total_n - train_n
+
+test_index = sample(seq_len(total_n), test_n)
+x_predict = x[test_index,]
+x = x[-test_index,]
+
+n = train_n
+y_predict = y[test_index,,drop=FALSE]
+y = y[-test_index,,drop=FALSE]
+
+pdp_range1 = (min(y_original) - min(y,na.rm=TRUE))/(max(y,na.rm=TRUE) - min(y,na.rm=TRUE)) - 0.5
+pdp_range2 = (max(y_original) - min(y,na.rm=TRUE))/(max(y,na.rm=TRUE) - min(y,na.rm=TRUE)) - 0.5
+```
+
+```{r}
+model1 = missBARTprobit(x, y, predict = TRUE, n_trees = 120, burn = 500, iters = 500, x_predict = x_predict, show_progress = TRUE, scale = TRUE, make_pdp = TRUE, pdp_range = c(pdp_range1, pdp_range2))
+
+# pdp_B = Reduce("+", model1$B_post)/length(model1$B_post)
+# pdp_param_mat_list = pdp_param_mat_list(x, intercept = TRUE, y_range = c(pdp_range1, pdp_range2))
+# pdp_model1 = pnorm(Reduce(cbind, lapply(pdp_param_mat_list, function(x) x %*% pdp_B)))
+
+pdp_model1 = Reduce("+", model1$pdp_out)/length(model1$pdp_out)
+
+matplot(matrix(seq(min(y_original), max(y_original), length=20)), pdp_model1, type = "l", xlim = c(min(y_original), max(y_original)), ylim = c(0,1))
+lines(matrix(seq(min(y_original), max(y_original), length=20)), rowMeans(pdp_model1), lwd=10, col="#FFF40F95")
+lines(matrix(seq(min(y_original), max(y_original), length=20)), rowMeans(pdp_model1), lwd=2, col="black")
+points(y_original, p_m)
+```
+
+```{r}
+y_post = model1$y_post
+
+mean_y_post = Reduce("+", y_post)/length(y_post)
+mean_y_post = unscale(mean_y_post, min = model1$min_y, max = model1$max_y)
+
+mean_new_y_post = Reduce("+", model1$new_y_post)/length(model1$new_y_post)
+mean_new_y_post = unscale(mean_new_y_post, min = model1$min_y, max = model1$max_y)
+
+BART_probit_plot = vector(mode = "list", length = p)
+BART_probit_facet = vector(mode = "list", length = p)
+cheat = vector("list", length = p)
+colours = c("#FD7446FF", "#709AE1FF", "#1A9993FF", "#FD8CC1FF", "#FED439FF")
+for(j in 1:p){
+  min = min(y_original[,j], mean_y_post[,j]) 
+  max = max(y_original[,j], mean_y_post[,j]) 
+  cheat[[j]] = data.frame(y_seq = seq(min, max, length=n))
+
+  plot_data = data.frame(y_original = y_original[-test_index,j], y_post = mean_y_post[,j], Observed = factor(m[-test_index,j]))
+  plot = ggplot(plot_data, aes(y_original, y_post)) + 
+    geom_point(aes(color=Observed, shape = Observed), alpha = 0.8, size = 0.8) + 
+    scale_shape_manual(name = "", labels = c("Missing", "Observed"),values=c(17, 19)) +
+    scale_colour_manual(name = "", labels = c("Missing", "Observed"), values = c(colours[1], colours[3])) +
+    theme_bw() +
+    theme(text = element_text(size = 20)) +
+    ylab(paste("Predicted Y",j,sep="")) +
+    xlab(paste("Data Y",j,sep="")) +
+    ggtitle("missBARTprobit") +
+    geom_line(data=cheat[[j]], aes(y_seq, y_seq), colour="black", size=0.5)
+
+  BART_probit_plot[[j]] = plot
+  print(plot)
+
+  facet_labels = c("Missing", "Observed")
+  names(facet_labels) = c('0', '1')
+  facet_plot = plot + facet_grid(as.factor(m[-test_index,j]), labeller = as_labeller(facet_labels)) #vars(test$m)
+  BART_probit_facet[[j]] = facet_plot
+  print(facet_plot)
+  
+  # Plot out-of-sample observations
+  plot_new = ggplot(data = data.frame(y_original = y_original[test_index,j], y_post = mean_new_y_post[,j]), aes(y_original, y_post)) +
+    geom_point(colour = colours[3], size=0.8, alpha = 0.8) +
+    theme_bw() +
+    ylab(paste("Predicted Y_test",j,sep="")) +
+    xlab(paste("Data Y_test",j,sep="")) +
+    ggtitle("missBARTprobit") +
+    geom_line(data=cheat[[j]], aes(y_seq, y_seq), colour="grey", size=0.5)
+  print(plot_new)
+
+}
+
+rmse = sqrt(colSums((y_original[-test_index] - mean_y_post)^2)/n)
+cat("RMSE (In-sample) = ", rmse, "\n")
+
+rmse2 = sqrt(colSums((y_original[test_index] - mean_new_y_post)^2)/test_n)
+cat("RMSE (Out-of-sample) = ", rmse2, "\n")
+```
+
+```{r}
+z_post = model1$z_post
+p_model = Reduce("+", lapply(z_post, function(x) pnorm(x)))/length(z_post)
+
+test = Reduce(cbind, lapply(z_post, function(x) pnorm(x)))
+matplot(test[, 400:500])
+plot(y_original[-test_index,,drop=FALSE], p_model)
+```
+
+
+```{r}
+model2 = missBART2(x, y, predict = TRUE, n_reg_trees = 120, n_class_trees = 90, burn = 500, iters = 500, x_predict = x_predict, show_progress = TRUE, progress_every = 10, y_range = c(pdp_range1, pdp_range2), make_pdp = TRUE)
+
+pdp = Reduce("+", model2$pdp_out)/length(model2$pdp_out)
+matplot(matrix(seq(min(y_original), max(y_original), length=20)), t(pnorm(pdp)), type = "l", xlab = "Y", ylab = "p(m)", xlim = c(min(y_original), max(y_original)), ylim = c(0,1))
+lines(matrix(seq(min(y_original), max(y_original), length=20)), rowMeans(t(pnorm(pdp))), lwd=10, col="#FFF40F95")
+lines(matrix(seq(min(y_original), max(y_original), length=20)), rowMeans(t(pnorm(pdp))), lwd=2, col="black")
+points(y_original, p_m)
+```
+
+```{r}
+y_post = model2$y_post
+
+mean_y_post = Reduce("+", y_post)/length(y_post)
+mean_y_post = unscale(mean_y_post, min = model2$min_y, max = model2$max_y)
+
+mean_new_y_post = Reduce("+", model2$new_y_post)/length(model2$new_y_post)
+mean_new_y_post = unscale(mean_new_y_post, min = model2$min_y, max = model2$max_y)
+
+BART_probit_plot = vector(mode = "list", length = p)
+BART_probit_facet = vector(mode = "list", length = p)
+cheat = vector("list", length = p)
+colours = c("#FD7446FF", "#709AE1FF", "#1A9993FF", "#FD8CC1FF", "#FED439FF")
+for(j in 1:p){
+  min = min(y_original[,j], mean_y_post[,j]) 
+  max = max(y_original[,j], mean_y_post[,j]) 
+  cheat[[j]] = data.frame(y_seq = seq(min, max, length=n))
+
+  plot_data = data.frame(y_original = y_original[-test_index,j], y_post = mean_y_post[,j], Observed = factor(m[-test_index,j]))
+  plot = ggplot(plot_data, aes(y_original, y_post)) + 
+    geom_point(aes(color=Observed, shape = Observed), alpha = 0.8, size = 0.8) + 
+    scale_shape_manual(name = "", labels = c("Missing", "Observed"),values=c(17, 19)) +
+    scale_colour_manual(name = "", labels = c("Missing", "Observed"), values = c(colours[1], colours[3])) +
+    theme_bw() +
+    theme(text = element_text(size = 20)) +
+    ylab(paste("Predicted Y",j,sep="")) +
+    xlab(paste("Data Y",j,sep="")) +
+    ggtitle("missBART2") +
+    geom_line(data=cheat[[j]], aes(y_seq, y_seq), colour="black", size=0.5)
+
+  BART_probit_plot[[j]] = plot
+  print(plot)
+
+  facet_labels = c("Missing", "Observed")
+  names(facet_labels) = c('0', '1')
+  facet_plot = plot + facet_grid(as.factor(m[-test_index,j]), labeller = as_labeller(facet_labels)) #vars(test$m)
+  BART_probit_facet[[j]] = facet_plot
+  print(facet_plot)
+  
+  # Plot out-of-sample observations
+  plot_new = ggplot(data = data.frame(y_original = y_original[test_index,j], y_post = mean_new_y_post[,j]), aes(y_original, y_post)) +
+    geom_point(colour = colours[3], size=0.8, alpha = 0.8) +
+    theme_bw() +
+    ylab(paste("Predicted Y_test",j,sep="")) +
+    xlab(paste("Data Y_test",j,sep="")) +
+    ggtitle("missBART2") +
+    geom_line(data=cheat[[j]], aes(y_seq, y_seq), colour="grey", size=0.5)
+  print(plot_new)
+
+}
+
+rmse = sqrt(colSums((y_original[-test_index] - mean_y_post)^2)/n)
+cat("RMSE (In-sample) = ", rmse, "\n")
+
+rmse2 = sqrt(colSums((y_original[test_index] - mean_new_y_post)^2)/test_n)
+cat("RMSE (Out-of-sample) = ", rmse2, "\n")
+
+```
+
+
+```{r, echo=FALSE, eval=FALSE, include=FALSE}
+k = 1
+batch_size = c(rep(floor(nrow(data)/k), k-1), floor(nrow(data)/k) + (nrow(data)%%k))
+rand_id = sample(seq_len(nrow(data)), nrow(data))
+batch_id = split(rand_id, rep(1:k, batch_size))
+
+rmse_train = vector(length = k)
+rmse_test = vector(length = k)
+
+rmse_train2 = vector(length = k)
+rmse_test2 = vector(length = k)
+
+for(i in seq_along(batch_size)){
+  cat("Performing cross-validation for Batch ", i, "\n")
+  test_index = batch_id[[i]]
+  x_test = x[test_index,]
+  x_train = x[-test_index,]
+  y_test = y[test_index,,drop=FALSE]
+  y_train = y[-test_index,,drop=FALSE]
+  
+  missing_id = which(is.na(y_train))
+  missing_id_test = which(is.na(y_test))
+  
+  BART = missBART2(x = x_train, y = y_train, x_predict = x_test, n_reg_trees = 90, n_class_trees = 90, 
+                   burn = 500, iters = 1000, thin = 2, 
+                   predict = TRUE, show_progress = TRUE)
+  
+  mean_y_post = Reduce("+", BART$y_post)/length(BART$y_post)
+  mean_y_post = unscale(mean_y_post, min = BART$min_y, max = BART$max_y)
+  
+  mean_new_y_post = Reduce("+", BART$new_y_post)/length(BART$new_y_post)
+  mean_new_y_post = unscale(mean_new_y_post, min = BART$min_y, max = BART$max_y)
+  
+  for(j in 1:ncol(y)){
+    rmse_train[i,j] = sqrt(colSums((y_train[,j] - mean_y_post[,j)^2)/nrow(y_train[,j]))
+    rmse_test[i,j] = sqrt(colSums((y_test[,j] - mean_new_y_post[,j])^2)/nrow(y_test[,j]))
+
+    plot1 = ggplot(data = data.frame(y = y_train[,j,drop(TRUE)], y_hat = mean_y_post[,j]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_y_post[,j,drop=FALSE]), aes(x = mean_y_post[,j,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBART2: Training batch ", i)) + geom_abline(intercept = 0) 
+    
+    plot2 = ggplot(data = data.frame(y = y_test[-missing_id_test,,drop(TRUE)], y_hat = mean_new_y_post[-missing_id_test]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_new_y_post[missing_id_test,,drop=FALSE]), aes(x = mean_new_y_post[missing_id_test,,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBART2: Testing batch ", i)) + geom_abline(intercept = 0)
+    
+    grid.arrange(plot1, plot2, ncol = 2, newpage = TRUE)
+  }
+  
+  cat("\n")
+  cat("\n")
+  
+  ######## missBARTprobit ########
+  
+  x_test = x_mice[test_index,]
+  x_train = x_mice[-test_index,]
+  y_test = y_mice[test_index,,drop=FALSE]
+  y_train = y_mice[-test_index,,drop=FALSE]
+  
+  missing_id = which(is.na(y[-test_index,,drop=FALSE]))
+  missing_id_test = which(is.na(y[test_index,]))
+  
+  BART2 = missBARTprobit(x = x_train, y = y_train, x_predict = x_test, n_trees = 90, 
+                   burn = 500, iters = 1000, thin = 2, 
+                   predict = TRUE, show_progress = TRUE)
+  
+  mean_y_post = Reduce("+", BART2$y_post)/length(BART2$y_post)
+  mean_y_post = unscale(mean_y_post, min = BART2$min_y, max = BART2$max_y)
+  
+  mean_new_y_post = Reduce("+", BART2$new_y_post)/length(BART2$new_y_post)
+  mean_new_y_post = unscale(mean_new_y_post, min = BART2$min_y, max = BART2$max_y)
+  
+  rmse_train2[i] = sqrt(sum((y_train[-missing_id,] - mean_y_post[-missing_id])^2)/nrow(y_train[-missing_id,,drop=FALSE]))
+  rmse_test2[i] = sqrt(sum((y_test[-missing_id_test,] - mean_new_y_post[-missing_id_test])^2)/nrow(y_test[-missing_id_test,,drop=FALSE]))
+  
+  plot1 = ggplot(data = data.frame(y = y_train[-missing_id,,drop(TRUE)], y_hat = mean_y_post[-missing_id]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_y_post[missing_id,,drop=FALSE]), aes(x = mean_y_post[missing_id,,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBART2: Training batch ", i)) + geom_abline(intercept = 0) 
+  
+  plot2 = ggplot(data = data.frame(y = y_test[-missing_id_test,,drop(TRUE)], y_hat = mean_new_y_post[-missing_id_test]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_new_y_post[missing_id_test,,drop=FALSE]), aes(x = mean_new_y_post[missing_id_test,,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBARTprobit: Testing batch ", i)) + geom_abline(intercept = 0)
+  
+  grid.arrange(plot1, plot2, ncol = 2, newpage = TRUE)
+  
+  cat("\n")
+  cat("\n")
+}
+```

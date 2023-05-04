@@ -24,26 +24,29 @@
 #' x <- matrix(runif(6), ncol = 2)
 #' y <- matrix(runif(6), ncol = 2) %*% matrix(rnorm(4), ncol=2)
 #' missBARTprobit(x, y, n_trees = 2, burn = 2, iters = 2, thin = 1, scale = FALSE)
-missBARTprobit = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters = 100, thin = 2, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
-                           scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, ...) {
+missBARTprobit = function(x, y, x_predict = c(), n_trees = 20, burn = 100, iters = 100, thin = 2, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
+                           scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, ...) {
 
+
+  if(is.null(x_predict)) predict = FALSE
   y = as.matrix(y)
   x = as.matrix(x)
 
   for(l in 1:ncol(x)){
     if(any(is.na(x[,l]))){
       x = cbind(x, 1-as.integer(is.na(x[,l])))
+      if(predict) {
+        x_predict = cbind(x_predict, 1-as.integer(is.na(x_predict[,l])))
+        colnames(x_predict) = colnames(x)
+      }
     }
   }
-
-  if(is.na(x_predict)) predict = FALSE
 
   min_y = apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
   max_y = apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
   if(scale){
     y = t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
     if(nrow(y)==1) y = t(y)
-    if(predict) y_predict = t(apply(sweep(y_predict, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
   }
 
   #####-------------------- GET PARAMETERS --------------------#####
@@ -112,6 +115,7 @@ missBARTprobit = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters 
   R_post = vector(mode = "list", length = 0)
   y_post = vector(mode = "list", length = 0)
   y_pred = vector(mode = "list", length = 0)
+  z_post = vector(mode = "list", length = 0)
 
   new_B = matrix(0, ncol=p, nrow=r) #matrix(rnorm(r*p, mean = 0, sd = 1/sqrt(tau_b)), ncol = p)
   new_R = diag(1, p)
@@ -129,6 +133,11 @@ missBARTprobit = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters 
     tree_phi_pred = vector(mode = "list", length = n_trees)
     n_new = nrow(x_predict)
     new_y_post = vector(mode = "list", length = 0)
+  }
+
+  if(p==1 && make_pdp){
+    pdp_out = vector(mode = "list", length = total_iters)
+    pdp_list = pdp_param_mat_list(x = x, intercept = TRUE, y_range = pdp_range)
   }
 
   #####----- PROGRESS BAR -----#####
@@ -195,7 +204,8 @@ missBARTprobit = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters 
 
       ###----- Out-of-Sample Predictions -----###
       if(predict){
-        predict_change_id[[j]] = get_change_points(accepted_trees[[j]], rbind(x, x_predict))[-c(1:n)] # assigns each x to a terminal node
+        # predict_change_id[[j]] = get_change_points(accepted_trees[[j]], rbind(x, x_predict))[-c(1:n)] # assigns each x to a terminal node
+        predict_change_id[[j]] = get_change_points(accepted_trees[[j]], t(cbind(t(x), t(x_predict))))[-c(1:n)]
         tree_phi_pred[[j]] = L_mu[predict_change_id[[j]],, drop=FALSE] # mu_j's for new x
       }
 
@@ -205,14 +215,15 @@ missBARTprobit = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters 
     #--Get BART predictions
     y_hat = Reduce("+", tree_phi)
 
-    #--Sample missing values
-    y_miss = update_y_miss_reg(x = x, y = y, m = m, z = z, y_hat = y_hat, B = new_B, R = new_R, omega = new_omega, include_x = include_x, include_y = include_y)
-    y_hat[missing_index] = y[missing_index] = y_miss[missing_index]
-    Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
-
     #--Sample data precision and kappa
     new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
     kappa = sim_kappa(tree_mu[[i]], kappa_a, kappa_b)
+
+    #--Sample missing values
+    y_miss = update_y_miss_reg(x = x, y = y, m = m, z = z, y_hat = y_hat, B = new_B, R = new_R, omega = new_omega, include_x = include_x, include_y = include_y)
+    y[missing_index] = y_miss[missing_index]
+    y_hat[missing_index] = y_miss[missing_index]
+    Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
 
     ###----- Probit updates -----###
     z = update_z(Y, m, new_B, new_R)
@@ -247,19 +258,27 @@ missBARTprobit = function(x, y, x_predict = NA, n_trees = 20, burn = 100, iters 
       R_post = append(R_post, list(new_R))
       B_post = append(B_post, list(new_B))
       if(predict) new_y_post = append(new_y_post, list(new_predictions))
+      z_post = append(z_post, list(z))
 
       pred = multi_rMVN(y_hat, new_omega)
       pred[missing_index] = y[missing_index]
       y_pred = append(y_pred, list(pred))
     }
+
+    if(p==1 && make_pdp){
+      pdp_out[[i]] = pnorm(Reduce(cbind, lapply(pdp_list, function(x) x %*% new_B)))
+    }
   } # End of i iterations
 
   if(!predict) new_y_post = NA
+  if(!make_pdp || p>1) pdp_out = NA
 
   return(list(y_post = y_post, omega_post = omega_post, R_post = R_post, B_post = B_post,
               imputed = y, new_y_post = new_y_post, accepted_trees = accepted_trees,
               burn = burn, iters = iters, thin = thin,
               max_y = max_y, min_y = min_y,
-              y_pred = y_pred))
+              y_pred = y_pred,
+              z_post = z_post,
+              pdp_out = pdp_out))
 }
 
