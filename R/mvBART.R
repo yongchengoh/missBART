@@ -19,24 +19,28 @@
 #' @export
 #'
 #' @examples
-mvBART = function(x, y, x_predict = NA, n_trees = 50, burn = 1000, iters = 1000, thin = 3, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
+mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000, thin = 3, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
                            scale = TRUE, show_progress = TRUE, progress_every = 10, ...) {
 
+  if(is.null(x_predict)) predict = FALSE
   y = as.matrix(y)
   x = as.matrix(x)
 
   for(l in 1:ncol(x)){
     if(any(is.na(x[,l]))){
       x = cbind(x, 1-as.integer(is.na(x[,l])))
+      if(predict) {
+        x_predict = cbind(x_predict, 1-as.integer(is.na(x_predict[,l])))
+        colnames(x_predict) = colnames(x)
+      }
     }
   }
 
-  min_y = apply(y, 2, min, na.rm = TRUE)
-  max_y = apply(y, 2, max, na.rm = TRUE)
+  min_y = apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
+  max_y = apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
   if(scale){
     y = t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
     if(nrow(y)==1) y = t(y)
-    if(predict) y_predict = t(apply(sweep(y_predict, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
   }
 
   #####-------------------- GET PARAMETERS --------------------#####
@@ -48,12 +52,13 @@ mvBART = function(x, y, x_predict = NA, n_trees = 50, burn = 1000, iters = 1000,
   total_iters = burn + thin*iters
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
-  mu0 <- colMeans(y, na.rm = TRUE) #rep(hypers$mu0, p) #
+  mu0 <- rep(hypers$mu0, p)
+  kappa = 2*sqrt(n_trees) #4*n_trees^2
   alpha <- p + 1 #max(5, p + hypers$alpha)
-  V = diag(hypers$V, p) #diag(hypers$V, p)
+  sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
+  V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha))
+  # V = diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p) #diag(hypers$V, p)
   Vinv <- solve(V)
-  kappa_a = 16
-  kappa_b = 1/n_trees
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha <- tree_prior_params$prior_alpha
@@ -84,7 +89,6 @@ mvBART = function(x, y, x_predict = NA, n_trees = 50, burn = 1000, iters = 1000,
   accepted_trees <- lapply(seq_len(n_trees), function(x) accepted_trees[[x]] = df)
   change_id <- lapply(seq_len(n_trees), function(x) change_id[[x]] = rep(1, n))
 
-  kappa = n_trees*16
   tree_mu[[1]] = sapply(seq_len(n_trees), function(x) list(rMVN(mu = matrix(mu0, nrow=p), Q = kappa*diag(p))))
   tree_phi = lapply(seq_len(n_trees), function(x) rep(tree_mu[[1]][[x]], n))
 
@@ -141,14 +145,14 @@ mvBART = function(x, y, x_predict = NA, n_trees = 50, burn = 1000, iters = 1000,
 
       ###----- Metropolis-Hastings for accepting/rejecting proposed tree -----###
       if(decent_tree) {
-        p2 <- tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
-        l2 <- sum(sapply(split.data.frame(partial_res, change_points), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
-        p1 <- tree_prior[[j]]
-        l1 <- tree_likely[[j]]
-        ratio <- (p2 + l2) - (p1 + l1)
-        tree_accept[[j]][[i]] <- ratio >= 0 || - stats::rexp(1L) <= ratio
+        p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
+        l2 = sum(sapply(split.data.frame(partial_res, change_points), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
+        p1 = tree_prior[[j]]
+        l1 = sum(sapply(split.data.frame(partial_res, change_id[[j]]), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)) #tree_likely[[j]]
+        ratio = (p2 + l2) - (p1 + l1)
+        tree_accept[[j]][[i]] = ratio >= 0 || - stats::rexp(1L) <= ratio
       } else {
-        tree_accept[[j]][[i]] <- FALSE
+        tree_accept[[j]][[i]] = FALSE
       }
 
       ###----- Storing updated tree if accepted -----###
@@ -180,7 +184,7 @@ mvBART = function(x, y, x_predict = NA, n_trees = 50, burn = 1000, iters = 1000,
 
     #--Sample data precision and kappa
     new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
-    kappa = sim_kappa(tree_mu[[i]], kappa_a, kappa_b)
+    # kappa = sim_kappa(tree_mu[[i]], kappa_a, kappa_b)
 
     ###----- Out-of-Sample Predictions -----###
     if(predict){

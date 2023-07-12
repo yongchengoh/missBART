@@ -16,21 +16,22 @@
 #' y = y_original = data$y
 #' x = data$x
 #' ome = data$ome
-sim_data_friedman = function(n, p = 1, scale_par = 1, omega_diag = 500) {
+sim_data_friedman = function(n, p = 1, scale_par = 1, omega_diag = 1) {
   # Simulate some data using a multivariate version of Friedman
   # y = 10sin(πx1x2)+20(x3−0.5)2+10x4+5x5+ε
   X = matrix(NA, nrow = n, ncol = 5)
-  for(i in 1:ncol(X)) X[,i] = stats::rnorm(n, 0, 1)
-  pars = matrix(stats::rnorm(5 * p, sd = scale_par), ncol = p, nrow = 5) # 5 parameters on p dimensions
+  for(i in 1:ncol(X)) X[,i] = stats::runif(n) #stats::rnorm(n, 0, 1)
+  # pars = matrix(stats::rnorm(5 * p, sd = scale_par), ncol = p, nrow = 5) # 5 parameters on p dimensions
   y = mean = matrix(NA, ncol = p, nrow = n)
-  Omega = stats::rWishart(1, p+1, diag(omega_diag,p))[,,1]
+  Omega = stats::rWishart(1, p+1, diag(omega_diag, p))[,,1]
   if(p > 1) {
     err = mvrnorm(n, mu=rep(0, ncol(Omega)), Sigma = solve(Omega))
   } else {
     err = matrix(stats::rnorm(n, sd = 1/sqrt(Omega)), ncol = 1)
   }
   for(j in 1:p) {
-    mean[,j] = pars[1,j]*sin(X[,1]*X[,2]) + pars[2,j] * (X[,3]-0.5)^2 + pars[3,j] * X[,4] + pars[5,j] * X[,5]
+    # mean[,j] = pars[1,j]*sin(X[,1]*X[,2]) + pars[2,j] * (X[,3]-0.5)^2 + pars[3,j] * X[,4] + pars[5,j] * X[,5]
+    mean[,j] = 10*sin(X[,1]*X[,2]) + 20 * (X[,3]-0.5)^2 + 10 * X[,4] + 5 * X[,5]
     y[,j] = mean[,j] + err[,j]
   }
 
@@ -107,16 +108,16 @@ sim_missing = function(x, y, include_x = FALSE, include_y = FALSE, min_missing_p
     r = 1 + p + q
   }
   corR = diag(1,p)
-  psd = FALSE
-  while(!psd){
-    corR[upper.tri(corR)] = sample(seq(-1,1,length=100), sum(seq_len(p-1)))
-    corR[lower.tri(corR)] = t(corR)[lower.tri(corR)]
-    psd = all(eigen(corR)$values >= 0)
-  }
+  # psd = FALSE
+  # while(!psd){
+  #   corR[upper.tri(corR)] = sample(seq(-1,1,length=100), sum(seq_len(p-1)))
+  #   corR[lower.tri(corR)] = t(corR)[lower.tri(corR)]
+  #   psd = all(eigen(corR)$values >= 0)
+  # }
 
   for(seed in sample(seq(1000,100000), size = 10000)){
     set.seed(seed)
-    Psi_1 = rInvWishart(1, r+1, diag(1,r))[,,1]
+    Psi_1 = rInvWishart(1, r+1, diag(10,r))[,,1]
     B = matrnorm(matrix(0, nrow=r, ncol=p), Psi_1, corR)
     if(include_x & !include_y){
       phi = cbind(rep(1, n), x) %*% B
@@ -140,7 +141,7 @@ sim_missing = function(x, y, include_x = FALSE, include_y = FALSE, min_missing_p
   missing_index = which(is.na(y))
   obs_index = which(!is.na(y))
 
-  return(list(B = B, m = m, missing_y = y, missing_prop = missing_prop, missing_index = missing_index, obs_index = obs_index, corR = corR))
+  return(list(B = B, m = m, missing_y = y, missing_prop = missing_prop, missing_index = missing_index, obs_index = obs_index, corR = corR, z_mod = z_mod))
 }
 
 #' Simulate missing data from a BART model
@@ -173,7 +174,9 @@ sim_missing_trees = function(x, y, trees = 1, include_x = FALSE, include_y = TRU
     Y = cbind(x, y)
   }
 
-  kappa = 0.5*trees
+  if(!exists('min_node')) min_node = round(n/100)
+
+  kappa = 1
   sum_mu = matrix(0, ncol = p, nrow = n)
   true_trees = vector(mode = "list", length = trees)
 
@@ -186,12 +189,14 @@ sim_missing_trees = function(x, y, trees = 1, include_x = FALSE, include_y = TRU
       df2 = data.frame(matrix(ncol = 7, nrow = 1))
       colnames(df2) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
       df2[1,] = c(0,0,1,0,1,0,0)
-      n_splits = sample(seq(2, 2), 1)
-      mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
+      n_splits = 2
+      # n_splits = sample(seq(1, 5), 1)
       for(j in 1:n_splits){
-        new_tree = propose_tree(df2, Y, min_node = 20, max_attempt = 10, i = 2)
+        new_tree = propose_tree(df2, Y, min_node = min_node, max_attempt = 10, i = 2)
         df2 = new_tree$new_df
       }
+      # mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
+      mu = matrix(c(-2, -2, 2), ncol=1)
       true_trees[[i]] = df2
       sum_mu = sum_mu + mu[new_tree$change_points,,drop=FALSE]
     }
@@ -209,12 +214,6 @@ sim_missing_trees = function(x, y, trees = 1, include_x = FALSE, include_y = TRU
   obs_index = which(!is.na(y))
   miss_row = apply(y, 1, function(x) any(is.na(x)))
 
-  #   for(i in 1:trees){
-  #     new_df = true_trees[[i]]
-  #     change_points = get_change_points(new_df, Y)
-  #     decent_tree[i] = !Reduce(any, lapply(split(miss_row, change_points), function(x) all(isTRUE(x))))
-  #   }
-  #   decent = all(decent_tree)
-  # }
   return(list(m = m, missing_y = y, missing_prop = missing_prop, missing_index = missing_index, obs_index = obs_index, true_trees = true_trees, z = z_mod))
 }
+

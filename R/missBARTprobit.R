@@ -24,8 +24,9 @@
 #' x <- matrix(runif(6), ncol = 2)
 #' y <- matrix(runif(6), ncol = 2) %*% matrix(rnorm(4), ncol=2)
 #' missBARTprobit(x, y, n_trees = 2, burn = 2, iters = 2, thin = 1, scale = FALSE)
-missBARTprobit = function(x, y, x_predict = c(), n_trees = 20, burn = 100, iters = 100, thin = 2, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
-                           scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, ...) {
+missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, iters = 1000, thin = 3, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
+                           scale = TRUE, include_x = TRUE, include_y = TRUE,
+                          show_progress = TRUE, progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = FALSE, ...) {
 
 
   if(is.null(x_predict)) predict = FALSE
@@ -64,13 +65,16 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 20, burn = 100, iters
   m[is.na(y)] = 0
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
-  mu0 <- colMeans(y, na.rm = TRUE) #rep(hypers$mu0, p) #
+  mu0 <- rep(hypers$mu0, p)
   # kappa <- n_trees*16 #sqrt(n_trees) #hypers$kappa #(2^2)*n_trees*4
+  kappa = 2*sqrt(n_trees) #4*n_trees^2
   alpha <- p + 1 #max(5, p + hypers$alpha)
-  V = diag(hypers$V, p) #diag(hypers$V, p)
-  Vinv <- solve(V)
-  kappa_a = 16
-  kappa_b = 1/n_trees
+  sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
+  V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
+  # V = diag(n_trees, p) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
+  Vinv = solve(V)
+  # kappa_a = 16
+  # kappa_b = 1/n_trees
 
   Psi = rInvWishart(1, r+1, diag(1,r))[,,1]
 
@@ -103,7 +107,6 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 20, burn = 100, iters
   accepted_trees <- lapply(seq_len(n_trees), function(x) accepted_trees[[x]] = df)
   change_id <- lapply(seq_len(n_trees), function(x) change_id[[x]] = rep(1, n))
 
-  kappa = n_trees*16
   tree_mu[[1]] = sapply(seq_len(n_trees), function(x) list(rMVN(mu = matrix(mu0, nrow=p), Q = kappa*diag(p))))
   tree_phi = lapply(seq_len(n_trees), function(x) rep(tree_mu[[1]][[x]], n))
 
@@ -120,7 +123,13 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 20, burn = 100, iters
   new_B = matrix(0, ncol=p, nrow=r) #matrix(rnorm(r*p, mean = 0, sd = 1/sqrt(tau_b)), ncol = p)
   new_R = diag(1, p)
   D = diag(1, p)
-  y[missing_index] = 0
+
+  if(mice_impute){
+    imputed = mice::complete(mice::mice(cbind(y, x)))[,1:p]
+    y[missing_index] = imputed[missing_index]
+  } else {
+    y[missing_index] = 0
+  }
   z = matrix(rep(1, n*p), nrow=n, ncol=p)
   z[missing_index] = -1
   Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
@@ -137,7 +146,11 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 20, burn = 100, iters
 
   if(p==1 && make_pdp){
     pdp_out = vector(mode = "list", length = total_iters)
-    pdp_list = pdp_param_mat_list(x = x, intercept = TRUE, y_range = pdp_range)
+    if(include_x){
+      pdp_list = pdp_param_mat_list(x = x, intercept = TRUE, y_range = pdp_range, include_x = include_x, n = n)
+    } else {
+
+    }
   }
 
   #####----- PROGRESS BAR -----#####
@@ -177,14 +190,14 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 20, burn = 100, iters
 
       ###----- Metropolis-Hastings for accepting/rejecting proposed tree -----###
       if(decent_tree) {
-        p2 <- tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
-        l2 <- sum(sapply(split.data.frame(partial_res, change_points), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
-        p1 <- tree_prior[[j]]
-        l1 <- tree_likely[[j]]
-        ratio <- (p2 + l2) - (p1 + l1)
-        tree_accept[[j]][[i]] <- ratio >= 0 || - stats::rexp(1L) <= ratio
+        p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
+        l2 = sum(sapply(split.data.frame(partial_res, change_points), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
+        p1 = tree_prior[[j]]
+        l1 = sum(sapply(split.data.frame(partial_res, change_id[[j]]), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)) #tree_likely[[j]]
+        ratio = (p2 + l2) - (p1 + l1)
+        tree_accept[[j]][[i]] = ratio >= 0 || - stats::rexp(1L) <= ratio
       } else {
-        tree_accept[[j]][[i]] <- FALSE
+        tree_accept[[j]][[i]] = FALSE
       }
 
       ###----- Storing updated tree if accepted -----###
@@ -217,7 +230,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 20, burn = 100, iters
 
     #--Sample data precision and kappa
     new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
-    kappa = sim_kappa(tree_mu[[i]], kappa_a, kappa_b)
+    # kappa = sim_kappa(tree_mu[[i]], kappa_a, kappa_b)
 
     #--Sample missing values
     y_miss = update_y_miss_reg(x = x, y = y, m = m, z = z, y_hat = y_hat, B = new_B, R = new_R, omega = new_omega, include_x = include_x, include_y = include_y)

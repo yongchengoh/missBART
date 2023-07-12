@@ -22,9 +22,10 @@
 #' @export
 #'
 #' @examples
-missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20, burn = 100, iters = 100, thin = 2, predict = TRUE,
-                    tree_prior_params = tree_list(), hypers = hypers_list(),
-                    scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, ...) {
+missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 50, burn = 1000, iters = 1000, thin = 3, predict = TRUE, MH_sd = 0.1,
+                     tree_prior_params = tree_list(), hypers = hypers_list(),
+                     scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10,
+                     pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = FALSE, ...) {
 
   if(is.null(x_predict)) predict = FALSE
   y = as.matrix(y)
@@ -62,13 +63,11 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 = rep(hypers$mu0, p)
-  alpha = max(5, p + hypers$alpha)
-  V = diag(hypers$V, p) #diag(1/apply(y, 2, sd, na.rm=TRUE), p)
+  alpha = p + 1
+  # sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
+  V = diag(1/(summary(lm((y ~ x)))$sigma)^2, p)
+  # V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
   Vinv = solve(V)
-  # Psi = diag(1, r)
-  # kappa_a_reg = kappa_a_class = 16
-  # kappa_b_reg = 1/n_reg_trees
-  # kappa_b_class = 1/n_class_trees
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha = tree_prior_params$prior_alpha
@@ -96,6 +95,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
   R_post = vector(mode = "list", length = 0)
   y_post = vector(mode = "list", length = 0)
   y_pred = vector(mode = "list", length = 0)
+  z_post = vector(mode = "list", length = 0)
 
   accepted_class_trees = lapply(vector(mode = "list", length = n_class_trees), as.list)
   class_change_id = vector(mode = "list", length = n_class_trees)
@@ -124,8 +124,8 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
   accepted_reg_trees = lapply(seq_len(n_reg_trees), function(x) accepted_reg_trees[[x]] = df)
   reg_change_id = lapply(seq_len(n_reg_trees), function(x) reg_change_id[[x]] = rep(1, n))
 
-  kappa_reg = 16*n_reg_trees
-  kappa_class = 16*n_class_trees
+  kappa_reg = 2*sqrt(n_reg_trees)  #2*sqrt(n_reg_trees)
+
   reg_mu[[1]] = sapply(seq_len(n_reg_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = kappa_reg*diag(p))))
   reg_phi = lapply(seq_len(n_reg_trees), function(x) rep(reg_mu[[1]][[x]], n))
 
@@ -136,6 +136,8 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
   accepted_class_trees = lapply(seq_len(n_class_trees), function(x) accepted_class_trees[[x]] = df)
   class_change_id = lapply(seq_len(n_class_trees), function(x) class_change_id[[x]] = rep(1, n))
 
+  kappa_class = 2*sqrt(n_class_trees) #4*n_class_trees^2
+
   class_mu[[1]] = sapply(seq_len(n_class_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = kappa_class*diag(p))))
   class_phi = lapply(seq_len(n_class_trees), function(x) rep(class_mu[[1]][[x]], n))
 
@@ -143,12 +145,18 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
   class_accept = lapply(seq_len(n_class_trees), function(x) class_accept[x][[1]] = TRUE) #do the thing please
 
   new_R = diag(1, p)
-  y[missing_index] = 0
+
+  if(mice_impute){
+    imputed = mice::complete(mice::mice(cbind(y, x)))[,1:p]
+    y[missing_index] = imputed[missing_index]
+  } else {
+    y[missing_index] = 0
+  }
+
   z = matrix(rep(1, n*p), nrow=n, ncol=p)
   z[missing_index] = -1
 
   Y = probit_predictors(x, y, include_x = include_x, include_y = include_y)
-
   new_omega = sim_omega(y = y, y_hat = Reduce("+", reg_phi), alpha = alpha, Vinv = Vinv)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
@@ -161,10 +169,14 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
 
   if(p==1 & make_pdp){
     #####----- PDP PLOT -----#####
-    pdp_list = pdp_param_mat_list(x = x, intercept = FALSE, y_range = pdp_range)
-    pdp_phi = matrix(0, nrow = n, ncol = 20)
+    if(include_x){
+      pdp_list = pdp_param_mat_list(x = x, intercept = FALSE, y_range = pdp_range, include_x = include_x, n = n)
+    } else {
+      pdp_list = list(seq(pdp_range[1], pdp_range[2], length = 50))
+    }
+    pdp_phi = matrix(0, nrow = 1, ncol = 50)
     pdp_out = vector(mode = "list", length = total_iters)
-    pdp_m = matrix(rep(m, 20), ncol=20)
+    pdp_m = matrix(rep(m, 50), ncol=50)
   }
 
   #####----- PROGRESS BAR -----#####
@@ -207,9 +219,15 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
 
       accept = FALSE
       if(decent_tree){
+        # p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
+        # l2 = sum(sapply(split.data.frame(partial_res_y, change_points), log_marginal_likelihood, kappa = kappa_reg, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
+        # accept = MH(reg_prior[[j]], reg_likely[[j]], p2, l2)
         p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
         l2 = sum(sapply(split.data.frame(partial_res_y, change_points), log_marginal_likelihood, kappa = kappa_reg, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
-        accept = MH(reg_prior[[j]], reg_likely[[j]], p2, l2)
+        p1 = reg_prior[[j]]
+        l1 = sum(sapply(split.data.frame(partial_res_y, reg_change_id[[j]]), log_marginal_likelihood, kappa = kappa_reg, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)) #tree_likely[[j]]
+        ratio = (p2 + l2) - (p1 + l1)
+        accept = ratio >= 0 || - stats::rexp(1L) <= ratio
       }
 
       if(accept){
@@ -242,7 +260,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
 
     #--Sample data precision
     new_omega = sim_omega(y, y_hat, alpha = alpha, Vinv = Vinv)
-    kappa_reg = sim_kappa(mu = reg_mu[[i]], a = 16, b = 1/n_reg_trees)
+    # kappa_reg = sim_kappa(mu = reg_mu[[i]], a = 16, b = 1/n_reg_trees)
 
     ###----- Probit BART -----###
     class_mu[[i]] = vector(mode = "list", n_class_trees)
@@ -273,6 +291,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
         p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
         l2 = sum(sapply(split.data.frame(partial_res_z, change_points), log_marginal_likelihood, kappa = kappa_class, omega = new_R, mu0 = mu0, Vinv = Vinv, alpha = alpha))
         l1 = sum(sapply(split.data.frame(partial_res_z, class_change_id[[k]]), log_marginal_likelihood, kappa = kappa_class, omega = new_R, mu0 = mu0, Vinv = Vinv, alpha = alpha))
+        # l1 = class_likely[[k]]
         accept = MH(class_prior[[k]], l1, p2, l2)
       }
 
@@ -281,6 +300,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
         class_prior[[k]] = p2
         class_likely[[k]] = l2
         class_change_id[[k]] = change_points
+        # print(new_df)
       }
 
       ###----- Tree node updates -----###
@@ -292,42 +312,46 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
 
       if(p==1 & make_pdp){
         ###----- PDP -----###
-        pdp_change_list = lapply(pdp_list, function(pdp) get_change_points(accepted_class_trees[[k]], rbind(Y, pdp))[-c(1:n)])
-        pdp_phi = pdp_phi + Reduce(rbind, lapply(pdp_change_list, function(x) L_mu[x]))
+        if(!include_x){
+          pdp_change_list = get_change_points(accepted_class_trees[[k]], rbind(Y, matrix(unlist(pdp_list), ncol=1)))[-c(1:n)]
+          pdp_phi[1,] = pdp_phi[1,] + L_mu[pdp_change_list,,drop=FALSE]
+          # predict_change_id[[j]] = get_change_points(accepted_reg_trees[[j]], rbind(x, x_predict))[-c(1:n)] # assigns each x to a terminal node
+          # reg_phi_pred[[j]] = L_mu[predict_change_id[[j]],, drop=FALSE] # mu_j's for new x
+        } else {
+          pdp_change_list = lapply(pdp_list, function(pdp) get_change_points(accepted_class_trees[[k]], rbind(Y, pdp))[-c(1:n)])
+          pdp_phi = pdp_phi + Reduce(rbind, lapply(pdp_change_list, function(x) L_mu[x]))
+        }
       }
     }
 
     #--Get classBART predictions
     z_hat = z = Reduce("+", class_phi)
     if(p==1){
-      z = matrix(stats::rnorm(n, mean=z, sd=1), ncol=p, byrow=TRUE)
+      z = matrix(stats::rnorm(n, mean=z_hat, sd=1), ncol=p, byrow=TRUE)
 
       if(make_pdp){
-        pdp_z = matrix(stats::rnorm(prod(dim(pdp_phi)), mean=pdp_phi, sd=1), ncol=ncol(pdp_phi))
-        pdp_z[intersect(which(pdp_z<0), which(pdp_m==1))] = 0
-        pdp_z[intersect(which(pdp_z>=0), which(pdp_m==0))] = 0
+        pdp_z = pdp_phi #matrix(stats::rnorm(prod(dim(pdp_phi)), mean=pdp_phi, sd=1), ncol=ncol(pdp_phi))
         pdp_out[[i]] = pdp_z
       }
     } else {
-      z = multi_rMVN(z, chol2inv(PD_chol(new_R)))
+      z = multi_rMVN(z_hat, diag(1,p))
     }
     z[intersect(which(z<0), which(m==1))] = 0
     z[intersect(which(z>=0), which(m==0))] = 0
-    kappa_class = sim_kappa(mu = class_mu[[i]], a = 16, b = 1/n_class_trees)
-
-
+    # kappa_class = 1 #sim_kappa(mu = class_mu[[i]], a = 16, b = 1/n_class_trees)
 
     if(include_y){ # If include_y==FALSE, then we are assuming MAR. Missing y's can be "imputed" from the model.
       #--Metropolis Hastings step for y_miss--#
-      y_miss = update_y_miss_BART(x = x, y = y, z = z, z_hat = z_hat, y_hat = y_hat, n_trees = n_class_trees, R = new_R, Omega = new_omega, missing_index = missing_index, accepted_class_trees = accepted_class_trees, class_mu_i = class_mu[[i]], include_x = include_x, include_y = include_y, MH_sd = 0.1)
+      y_miss = update_y_miss_BART(x = x, y = y, z = z, z_hat = z_hat, y_hat = y_hat, n_trees = n_class_trees,
+                                  R = new_R, Omega = new_omega, missing_index = missing_index,
+                                  accepted_class_trees = accepted_class_trees, class_mu_i = class_mu[[i]],
+                                  include_x = include_x, include_y = include_y, MH_sd = MH_sd)
       y_miss_accept[i,] = y_miss$accept[missing_index]
-      # y_miss = update_y_miss_BART(x = x, y = y, z = z, z_hat = z_hat, y_hat = y_hat, n_trees = n_class_trees, R = new_R, Omega = new_omega, missing_index = missing_index, accepted_class_trees = accepted_class_trees, class_mu_i = class_mu[[i]], include_x = include_x, include_y = include_y, MH_sd = 0.1)
-      # y_miss_accept[i,] = rep(y_miss$accept, p)[missing_index]
       y[missing_index] = y_miss$y[missing_index]
-      y_hat[missing_index] = y_miss$y[missing_index]
+      # y_hat[missing_index] = y_miss$y[missing_index]
     } else {
       y[missing_index] = multi_rMVN(y_hat, new_omega)[missing_index]
-      y_hat[missing_index] = multi_rMVN(y_hat, new_omega)[missing_index]
+      # y_hat[missing_index] = multi_rMVN(y_hat, new_omega)[missing_index]
     }
 
     Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = FALSE)
@@ -339,6 +363,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
       pred[missing_index] = y[missing_index]
       y_pred = append(y_pred, list(pred))
       omega_post = append(omega_post, list(new_omega))
+      z_post = append(z_post, list(z))
 
       if(predict){
         new_pred_mean = Reduce("+", reg_phi_pred)
@@ -354,10 +379,11 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 20, n_class_trees = 20
   if(!predict) new_y_post = NA
 
   return(structure(list(y_post = y_post, omega_post = omega_post,
-              x = x, imputed_y = y, new_y_post = new_y_post, accepted_reg_trees = accepted_reg_trees, accepted_class_trees = accepted_class_trees,
-              burn = burn, iters = iters, thin = thin,
-              max_y = max_y, min_y = min_y,
-              y_pred = y_pred, pdp_out = pdp_out), class = "bart"))
+                        x = x, imputed_y = y, new_y_post = new_y_post, accepted_reg_trees = accepted_reg_trees, accepted_class_trees = accepted_class_trees,
+                        burn = burn, iters = iters, thin = thin,
+                        max_y = max_y, min_y = min_y,
+                        z_post = z_post,
+                        y_pred = y_pred, pdp_out = pdp_out), class = "bart"))
 }
 
 # print.bart <- function(bart_out, ...) {
