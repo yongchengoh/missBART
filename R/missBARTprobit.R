@@ -66,15 +66,21 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 <- rep(hypers$mu0, p)
-  # kappa <- n_trees*16 #sqrt(n_trees) #hypers$kappa #(2^2)*n_trees*4
-  kappa = 2*sqrt(n_trees) #4*n_trees^2
-  alpha <- p + 1 #max(5, p + hypers$alpha)
-  sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
-  V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
+  kappa = 16*n_trees
+  # alpha <- p + 1 #max(5, p + hypers$alpha)
+  # sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
+  # V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
   # V = diag(n_trees, p) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
-  Vinv = solve(V)
+  # Vinv = solve(V)
   # kappa_a = 16
   # kappa_b = 1/n_trees
+  nu = 3
+  sample_t = rep(0, p)
+  for(i in 1:p){
+    sample_t[i] = 1/(summary(lm(y[,i]~x))$sigma)^2
+  }
+  qchi = qchisq(1-0.9, nu)
+  lambda = qchi/(nu * sample_t)
 
   Psi = rInvWishart(1, r+1, diag(1,r))[,,1]
 
@@ -125,7 +131,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   D = diag(1, p)
 
   if(mice_impute){
-    imputed = mice::complete(mice::mice(cbind(y, x)))[,1:p]
+    imputed = mice::complete(mice::mice(cbind(y, x), print = FALSE))[,1:p]
     y[missing_index] = imputed[missing_index]
   } else {
     y[missing_index] = 0
@@ -134,7 +140,8 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   z[missing_index] = -1
   Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
 
-  new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), alpha = alpha, Vinv = Vinv)
+  # new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), alpha = alpha, Vinv = Vinv)
+  new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), nu = nu, lambda = lambda)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict){
@@ -229,7 +236,8 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
     y_hat = Reduce("+", tree_phi)
 
     #--Sample data precision and kappa
-    new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
+    # new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
+    new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
     # kappa = sim_kappa(tree_mu[[i]], kappa_a, kappa_b)
 
     #--Sample missing values

@@ -198,7 +198,7 @@ p_model_missBARTprobit = Reduce("+", lapply(z_post, function(x) pnorm(x)))/lengt
 # iters = 2000
 # thin = 1
 
-model2 = missBART2(x, y, predict = TRUE, n_reg_trees = n_reg_trees, n_class_trees = n_class_trees, burn = burn, iters = iters, thin = thin, x_predict = x_predict, show_progress = TRUE, progress_every = 10, pdp_range = c(pdp_range1, pdp_range2), make_pdp = FALSE, include_x = FALSE, include_y = TRUE, MH_sd = MH_sd, mice_impute = TRUE)
+model2 = missBART2(x, y, predict = TRUE, n_reg_trees = n_reg_trees, n_class_trees = n_class_trees, burn = burn, iters = iters, thin = thin, x_predict = x_predict, show_progress = TRUE, progress_every = 10, pdp_range = c(pdp_range1, pdp_range2), make_pdp = TRUE, include_x = FALSE, include_y = TRUE, MH_sd = MH_sd, mice_impute = TRUE)
 
 #----------------------------------- PDP -----------------------------------#
 

@@ -63,11 +63,18 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 = rep(hypers$mu0, p)
-  alpha = p + 1
+  # alpha = p + 1
   # sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
-  V = diag(1/(summary(lm((y ~ x)))$sigma)^2, p)
+  # V = diag(1/(summary(lm((y ~ x)))$sigma)^2, p)
   # V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
-  Vinv = solve(V)
+  # Vinv = solve(V)
+  nu = 3
+  sample_t = rep(0, p)
+  for(i in 1:p){
+    sample_t[i] = 1/(summary(lm(y[,i]~x))$sigma)^2
+  }
+  qchi = qchisq(1-0.9, nu)
+  lambda = qchi/(nu * sample_t)
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha = tree_prior_params$prior_alpha
@@ -124,7 +131,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
   accepted_reg_trees = lapply(seq_len(n_reg_trees), function(x) accepted_reg_trees[[x]] = df)
   reg_change_id = lapply(seq_len(n_reg_trees), function(x) reg_change_id[[x]] = rep(1, n))
 
-  kappa_reg = 2*sqrt(n_reg_trees)  #2*sqrt(n_reg_trees)
+  kappa_reg = 16*n_reg_trees  #2*sqrt(n_reg_trees)
 
   reg_mu[[1]] = sapply(seq_len(n_reg_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = kappa_reg*diag(p))))
   reg_phi = lapply(seq_len(n_reg_trees), function(x) rep(reg_mu[[1]][[x]], n))
@@ -136,7 +143,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
   accepted_class_trees = lapply(seq_len(n_class_trees), function(x) accepted_class_trees[[x]] = df)
   class_change_id = lapply(seq_len(n_class_trees), function(x) class_change_id[[x]] = rep(1, n))
 
-  kappa_class = 2*sqrt(n_class_trees) #4*n_class_trees^2
+  kappa_class = 0.5*(n_class_trees) #4*n_class_trees^2
 
   class_mu[[1]] = sapply(seq_len(n_class_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = kappa_class*diag(p))))
   class_phi = lapply(seq_len(n_class_trees), function(x) rep(class_mu[[1]][[x]], n))
@@ -147,7 +154,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
   new_R = diag(1, p)
 
   if(mice_impute){
-    imputed = mice::complete(mice::mice(cbind(y, x)))[,1:p]
+    imputed = mice::complete(mice::mice(cbind(y, x), print=FALSE))[,1:p]
     y[missing_index] = imputed[missing_index]
   } else {
     y[missing_index] = 0
@@ -157,7 +164,8 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
   z[missing_index] = -1
 
   Y = probit_predictors(x, y, include_x = include_x, include_y = include_y)
-  new_omega = sim_omega(y = y, y_hat = Reduce("+", reg_phi), alpha = alpha, Vinv = Vinv)
+  # new_omega = sim_omega(y = y, y_hat = Reduce("+", reg_phi), alpha = alpha, Vinv = Vinv)
+  new_omega = sim_omega(y = y, y_hat = Reduce("+", reg_phi), nu = nu, lambda = lambda)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict){
@@ -259,7 +267,8 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
     y_hat = Reduce("+", reg_phi)
 
     #--Sample data precision
-    new_omega = sim_omega(y, y_hat, alpha = alpha, Vinv = Vinv)
+    # new_omega = sim_omega(y, y_hat, alpha = alpha, Vinv = Vinv)
+    new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
     # kappa_reg = sim_kappa(mu = reg_mu[[i]], a = 16, b = 1/n_reg_trees)
 
     ###----- Probit BART -----###

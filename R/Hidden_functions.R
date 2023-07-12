@@ -26,19 +26,26 @@ sim_mu <- function(change_points, partial_res, kappa, omega) {
   return(matrix((sapply(split.data.frame(partial_res, change_points), sim_mu_node, kappa = kappa, omega = omega)), nrow = length(unique(change_points)), byrow = TRUE))
 }
 
-sim_omega = function(y, y_hat, alpha, Vinv){
+# sim_omega = function(y, y_hat, alpha, Vinv){
+#   n = nrow(y)
+#   df = alpha + n
+#   scale = crossprod(y-y_hat) + Vinv
+#   scale = chol2inv(PD_chol(scale))
+#   if(ncol(y)==1){
+#     a = df/2
+#     b = 0.5/scale
+#     omega = stats::rgamma(1, a, b)
+#   } else {
+#     omega = stats::rWishart(1, df, scale)[,,1]
+#   }
+#   return(omega)
+# }
+sim_omega = function(y, y_hat, nu, lambda){
   n = nrow(y)
-  df = alpha + n
-  scale = crossprod(y-y_hat) + Vinv
-  scale = chol2inv(PD_chol(scale))
-  if(ncol(y)==1){
-    a = df/2
-    b = 0.5/scale
-    omega = stats::rgamma(1, a, b)
-  } else {
-    omega = stats::rWishart(1, df, scale)[,,1]
-  }
-  return(omega)
+  p = ncol(y)
+  shape = (nu + n)/2
+  rate = (colSums((y - y_hat)^2) + nu*lambda)/2
+  return(diag(rgamma(p, shape, rate), p))
 }
 
 sim_kappa = function(mu, a, b){ #tree_mu[[i]]
@@ -249,25 +256,6 @@ update_y_miss_BART = function(x, y, Y, z, z_hat, y_hat, n_trees, R, Omega, missi
 }
 
 # Computes the log marginal likelihood for accepting/rejecting BART trees
-log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
-  n = nrow(node_partial_res)
-  p = ncol(node_partial_res)
-  C = sum(apply(node_partial_res, 1, function(x) crossprod(crossprod(omega, x), x)))
-
-  vec = omega %*% colSums(node_partial_res) + kappa*mu0
-  mat = n*omega + diag(kappa, p)
-  vec2 = solve(mat, vec)
-  A = crossprod(crossprod(mat, vec2), vec2)
-
-  if(p==1){
-    det_omega = omega
-  } else {
-    det_omega = det(omega)
-  }
-
-  B = sum(diag(Vinv %*% omega))
-  return((n + alpha - p - 1)/2 * log(det_omega) - 0.5*(B + C - A))
-}
 # log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
 #   n = nrow(node_partial_res)
 #   p = ncol(node_partial_res)
@@ -277,8 +265,27 @@ log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, a
 #   mat = n*omega + diag(kappa, p)
 #   vec2 = solve(mat, vec)
 #   A = crossprod(crossprod(mat, vec2), vec2)
-#   return(-0.5*(C - A))
+#
+#   if(p==1){
+#     det_omega = omega
+#   } else {
+#     det_omega = det(omega)
+#   }
+#
+#   B = sum(diag(Vinv %*% omega))
+#   return((n + alpha - p - 1)/2 * log(det_omega) - 0.5*(B + C - A))
 # }
+log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
+  n = nrow(node_partial_res)
+  p = ncol(node_partial_res)
+  C = sum(apply(node_partial_res, 1, function(x) crossprod(crossprod(omega, x), x)))
+
+  vec = omega %*% colSums(node_partial_res) + kappa*mu0
+  mat = n*omega + diag(kappa, p)
+  vec2 = solve(mat, vec)
+  A = crossprod(vec2, vec)
+  return(-0.5*(C - A))
+}
 
 # Compute tree priors at the node level
 node_priors <- function(depth, prior_alpha, prior_beta) {
