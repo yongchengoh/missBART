@@ -154,7 +154,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
   new_R = diag(1, p)
 
   if(mice_impute){
-    imputed = mice::complete(mice::mice(cbind(y, x), print=FALSE))[,1:p]
+    imputed = as.matrix(mice::complete(mice::mice(cbind(y, x), print=FALSE)))[,1:p]
     y[missing_index] = imputed[missing_index]
   } else {
     y[missing_index] = 0
@@ -212,7 +212,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
       }
 
       ###----- Set likelihood of first stump of each tree -----###
-      if(i==1) reg_likely[[j]] = log_marginal_likelihood(node_partial_res = y, kappa = kappa_reg, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)
+      if(i==1) reg_likely[[j]] = log_marginal_likelihood(node_partial_res = partial_res_y, kappa = kappa_reg, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)
 
       ###----- Propose new tree -----###
       df = accepted_reg_trees[[j]]
@@ -266,11 +266,6 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
     #--Get BART predictions
     y_hat = Reduce("+", reg_phi)
 
-    #--Sample data precision
-    # new_omega = sim_omega(y, y_hat, alpha = alpha, Vinv = Vinv)
-    new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
-    # kappa_reg = sim_kappa(mu = reg_mu[[i]], a = 16, b = 1/n_reg_trees)
-
     ###----- Probit BART -----###
     class_mu[[i]] = vector(mode = "list", n_class_trees)
     for(k in seq_len(n_class_trees)) {
@@ -282,7 +277,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
       }
 
       ###----- Set likelihood of first stump of each tree -----###
-      if(i==1) class_likely[[k]] = log_marginal_likelihood(node_partial_res = z, kappa = kappa_class, omega = new_R, mu0 = mu0, Vinv = Vinv, alpha = alpha)
+      if(i==1) class_likely[[k]] = log_marginal_likelihood(node_partial_res = partial_res_z, kappa = kappa_class, omega = new_R, mu0 = mu0, Vinv = Vinv, alpha = alpha)
 
       ###----- Propose new tree -----###
       df = accepted_class_trees[[k]]
@@ -364,6 +359,11 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
     }
 
     Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = FALSE)
+
+    #--Sample data precision
+    # new_omega = sim_omega(y, y_hat, alpha = alpha, Vinv = Vinv)
+    new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
+    # kappa_reg = sim_kappa(mu = reg_mu[[i]], a = 16, b = 1/n_reg_trees)
 
     ###----- Store posterior samples after burn-in, accounting for thinning -----###
     if(i > burn && i%%thin == 0){

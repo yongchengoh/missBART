@@ -21,16 +21,16 @@ library(reshape2)
 #----- SIMULATE COMPLETE DATA
 n = 500
 p = 2
-# data = sim_data_friedman(n = n, p = p, omega_diag = 5, scale_par = 5)
+data = sim_data_friedman(n = n, p = p, omega_diag = 5, scale_par = 5)
 # data = mlbench::mlbench.friedman1(n*p)
-data = sim_data_trees(n = n, p = p, q = 2, trees = 2)
+# data = sim_data_trees(n = n, p = p, q = 2, trees = 2)
 # true_trees_data = data$true_trees
 y = y_original = matrix(data$y, ncol=p)
 x = x_original = data$x
 
 #----- SIMULATE MISSINGNESS IN DATA
-# missing = sim_missing_trees(x = x, y = y, include_x = FALSE, include_y = TRUE, max_missing_prop = 0.99, min_node = 5, min_missing_prop = 0.5, trees = 1)
-missing = sim_missing(x = x, y = y, include_x = TRUE, include_y = FALSE, min_missing_prop = 0.95, max_missing_prop = 0.99)
+missing = sim_missing_trees(x = x, y = y, include_x = FALSE, include_y = TRUE, max_missing_prop = 0.99, min_node = 5, min_missing_prop = 0.7, trees = 1)
+# missing = sim_missing(x = x, y = y, include_x = FALSE, include_y = TRUE, min_missing_prop = 0.7, max_missing_prop = 0.99)
 paste("Proportion of data observed: ", missing$missing_prop*100, "%")
 paste("Proportion of data missing: ", (1-missing$missing_prop)*100, "%")
 y = missing$missing_y

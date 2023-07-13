@@ -284,7 +284,15 @@ log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, a
   mat = n*omega + diag(kappa, p)
   vec2 = solve(mat, vec)
   A = crossprod(vec2, vec)
-  return(-0.5*(C - A))
+
+  if(p==1){
+    det_omega = omega
+    det_mat = mat
+  } else {
+    det_omega = det(omega)
+    det_mat = det(mat)
+  }
+  return(n*det_omega/2 + 0.5*kappa^p - 0.5 * det_mat - 0.5*(C - A))
 }
 
 # Compute tree priors at the node level

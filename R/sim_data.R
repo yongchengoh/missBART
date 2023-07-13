@@ -189,14 +189,14 @@ sim_missing_trees = function(x, y, trees = 1, include_x = FALSE, include_y = TRU
       df2 = data.frame(matrix(ncol = 7, nrow = 1))
       colnames(df2) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
       df2[1,] = c(0,0,1,0,1,0,0)
-      n_splits = 2
-      # n_splits = sample(seq(1, 5), 1)
+      # n_splits = 2
+      n_splits = sample(seq(1, 5), 1)
       for(j in 1:n_splits){
         new_tree = propose_tree(df2, Y, min_node = min_node, max_attempt = 10, i = 2)
         df2 = new_tree$new_df
       }
-      # mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
-      mu = matrix(c(-2, -2, 2), ncol=1)
+      mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
+      # mu = matrix(c(-2, -2, 2), ncol=1)
       true_trees[[i]] = df2
       sum_mu = sum_mu + mu[new_tree$change_points,,drop=FALSE]
     }
