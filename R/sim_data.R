@@ -61,14 +61,14 @@ sim_data_friedman = function(n, p = 1, scale_par = 1, omega_diag = 1) {
 sim_data_trees = function(n, p, q, min_x = 0, max_x = 1, trees = 1, ...){
   x = matrix(stats::runif(n*q, min = min_x, max = max_x), ncol = q)
   sum_mu = matrix(0, ncol = p, nrow = n)
-  ome = stats::rWishart(1, p+1, diag(1,p))[,,1]
-  kappa = 1 #16*trees
+  ome = diag(1, p) #stats::rWishart(1, p+1, diag(1,p))[,,1]
+  kappa = 16*trees
   true_trees = vector(mode = "list", length = trees)
   for(i in 1:trees){
     df1 <- data.frame(matrix(ncol = 7, nrow = 1))
     colnames(df1) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
     df1[1,] <- c(0,0,1,0,1,0,0)
-    n_splits = sample(seq(2,3), 1)
+    n_splits = sample(seq(1,5), 1)
     mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
     for(j in 1:n_splits){
       new_tree = propose_tree(df1, x, min_node = 20, max_attempt = 10, i = 2)
@@ -107,7 +107,7 @@ sim_missing = function(x, y, include_x = FALSE, include_y = FALSE, min_missing_p
   } else if (include_x & include_y){
     r = 1 + p + q
   }
-  corR = diag(1,p)
+  corR = diag(0.5,p)
   # psd = FALSE
   # while(!psd){
   #   corR[upper.tri(corR)] = sample(seq(-1,1,length=100), sum(seq_len(p-1)))
@@ -117,7 +117,7 @@ sim_missing = function(x, y, include_x = FALSE, include_y = FALSE, min_missing_p
 
   for(seed in sample(seq(1000,100000), size = 10000)){
     set.seed(seed)
-    Psi_1 = rInvWishart(1, r+1, diag(10,r))[,,1]
+    Psi_1 = diag(5,r) #rInvWishart(1, r+1, diag(10,r))[,,1]
     B = matrnorm(matrix(0, nrow=r, ncol=p), Psi_1, corR)
     if(include_x & !include_y){
       phi = cbind(rep(1, n), x) %*% B
@@ -176,7 +176,7 @@ sim_missing_trees = function(x, y, trees = 1, include_x = FALSE, include_y = TRU
 
   if(!exists('min_node')) min_node = round(n/100)
 
-  kappa = 1
+  kappa = 4/9 * trees
   sum_mu = matrix(0, ncol = p, nrow = n)
   true_trees = vector(mode = "list", length = trees)
 
@@ -190,7 +190,7 @@ sim_missing_trees = function(x, y, trees = 1, include_x = FALSE, include_y = TRU
       colnames(df2) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
       df2[1,] = c(0,0,1,0,1,0,0)
       # n_splits = 2
-      n_splits = sample(seq(1, 5), 1)
+      n_splits = sample(seq(2, 3), 1)
       for(j in 1:n_splits){
         new_tree = propose_tree(df2, Y, min_node = min_node, max_attempt = 10, i = 2)
         df2 = new_tree$new_df

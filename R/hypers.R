@@ -9,8 +9,8 @@
 #' @export
 #'
 #' @examples hypers_list(mu0 = 5, kappa = 2, alpha = 1, V = 2)
-hypers_list <- function(mu0 = 0, kappa = 1, alpha = 1, V = 1) {
-  return(list(mu0 = mu0, kappa = kappa, alpha = alpha, V = V))
+hypers_list <- function(mu0 = 0, kappa = 1, alpha = 1, V = 1, df = 10, q = 0.75) {
+  return(list(mu0 = mu0, kappa = kappa, alpha = alpha, V = V, df = df, q = q))
 }
 
 #' Tree prior parameters

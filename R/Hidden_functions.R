@@ -71,13 +71,23 @@ probit_predictors = function(x, y, include_x, include_y, intercept = FALSE){
   return(Y)
 }
 
+#' @importFrom tmvtnorm "rtmvnorm"
 update_z = function(Y, m, B, R){
   n = nrow(Y)
+  p = ncol(m)
   mu = Y %*% B
   U = diag(1, n)
-  z = matrnorm(mu, U, R)
-  z[intersect(which(z<0), which(m==1))] = 0
-  z[intersect(which(z>=0), which(m==0))] = 0
+  m_lower = matrix(0, nrow = n, ncol = p)
+  m_lower[m==0] = -Inf
+  m_upper = matrix(0, nrow = n, ncol = p)
+  m_upper[m==1] = Inf
+
+  z = matrix(nrow = n, ncol = ncol(m))
+  for(i in 1:n){
+    z[i,] = rtmvnorm(n = p, mean = mu[i,], sigma = R, lower = m_lower[i,], upper = m_upper[i,])
+  }
+  # z[m==0] =  rtnorm(length(which(m==0)), mean = mu[m==0], sd = 1, b = 0)
+  # z[m==1] = rtnorm(length(which(m==1)), mean = mu[m==1], sd = 1, a = 0)
   return(z)
 }
 
@@ -223,23 +233,22 @@ get_change_points <- function(df, x) {
   return(change_points)
 }
 
-update_y_miss_BART = function(x, y, Y, z, z_hat, y_hat, n_trees, R, Omega, missing_index, accepted_class_trees, class_mu_i, include_x, include_y, MH_sd = 0.05){
+update_y_miss_BART = function(x, y, z, z_hat, y_hat, n_trees, R, Omega, missing_index, accepted_class_trees, class_mu_i, include_x, include_y, MH_sd = 0.2){
   n = nrow(y)
   p = ncol(y)
   q = ncol(x)
   R_inv = if(p==1) 1 else chol2inv(PD_chol(R))
   n_miss = length(missing_index)
 
-  p1 = -apply(y - y_hat, 1, function(x) crossprod(x, (Omega %*% x)))
-  l1 = -apply(z - z_hat, 1, function(x) crossprod(x, (R_inv %*% x)))
+  p1 = -0.5*apply(y - y_hat, 1, function(x) crossprod(x, (Omega %*% x)))
+  l1 = -0.5*apply(z - z_hat, 1, function(x) crossprod(x, (R_inv %*% x)))
 
   proposed_y = y
   proposed_y[missing_index] = stats::rnorm(n_miss, mean = y[missing_index], sd = MH_sd)
-  # Y = as.matrix(cbind(x, proposed_y))
-  # Y = Y[, which(c(rep(include_x, q), rep(include_y, p)))]
   Y = probit_predictors(x = x, y = proposed_y, include_x = include_x, include_y = include_y)
   z_hat = matrix(0, nrow=n, ncol=p)
   for(k in 1:n_trees){
+    # MH_change_id = get_change_points(accepted_class_trees[[k]], rbind(probit_predictors(x = x, y = y, include_x = include_x, include_y = include_y), Y))[-c(1:n)]
     MH_change_id = get_change_points(accepted_class_trees[[k]], Y)
     z_hat = z_hat + class_mu_i[[k]][MH_change_id,, drop=FALSE]
   }
@@ -247,8 +256,8 @@ update_y_miss_BART = function(x, y, Y, z, z_hat, y_hat, n_trees, R, Omega, missi
     # z_hat = t(z_hat)
     Omega = matrix(Omega)
   }
-  p2 = -apply(proposed_y - y_hat, 1, function(x) crossprod(x, (Omega %*% x))) #t(x) %*% Omega %*% x
-  l2 = -apply(z - z_hat, 1, function(x) crossprod(x, (R_inv %*% x))) #t(x) %*% R_inv %*% x
+  p2 = -0.5*apply(proposed_y - y_hat, 1, function(x) crossprod(x, (Omega %*% x))) #t(x) %*% Omega %*% x
+  l2 = -0.5*apply(z - z_hat, 1, function(x) crossprod(x, (R_inv %*% x))) #t(x) %*% R_inv %*% x
   accept = mapply(MH, p1 = p1, l1 = l1, p2 = p2, l2 = l2)
   which_accepted = which(accept)
   y[which_accepted,] = proposed_y[which_accepted,]
@@ -322,11 +331,15 @@ tree_priors <- function(nodes, parents, depth, prior_alpha, prior_beta) {
 #'
 #' @examples
 unscale = function(scaled_val, min, max){
-  p = ncol(scaled_val)
-  n = nrow(scaled_val)
-  unscaled = matrix(nrow=n, ncol=p)
-  for(j in 1:p){
-    unscaled[,j] = (scaled_val[,j] + 0.5) * (max[j] - min[j]) + min[j]
+  if(is.matrix(scaled_val)){
+    p = ncol(scaled_val)
+    n = nrow(scaled_val)
+    unscaled = matrix(nrow=n, ncol=p)
+    for(j in 1:p){
+      unscaled[,j] = (scaled_val[,j] + 0.5) * (max[j] - min[j]) + min[j]
+    }
+  } else {
+    unscaled = (scaled_val + 0.5) * (max - min) + min
   }
   return(unscaled)
 }
