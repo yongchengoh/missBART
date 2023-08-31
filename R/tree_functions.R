@@ -177,7 +177,7 @@ propose_tree = function(df, x, min_node, max_attempt = 50, i, probit = FALSE, mi
     change_points = get_change_points(new_df, x)
     empty_terminal = length(unique(change_points)) != length(as.numeric(setdiff(row.names(new_df), new_df$parent)))
     decent_tree = isFALSE(empty_terminal) && all(table(change_points) >= min_node)
-    if(all(probit, decent_tree)) decent_tree = !Reduce(any, lapply(split(miss_row, change_points), function(x) all(isTRUE(x))))
+    if(all(probit, decent_tree)) decent_tree = !Reduce(any, lapply(split(miss_row, change_points), function(x) all(x)))
     # decent_tree = all(tabulate(change_points) >= min_node)
     attempt = attempt + 1
   } # End while loop

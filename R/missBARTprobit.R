@@ -27,7 +27,7 @@
 missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, iters = 1000, thin = 3, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
                            scale = TRUE, include_x = TRUE, include_y = TRUE,
                           show_progress = TRUE, progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = FALSE,
-                          true_trees_data, ...) {
+                          true_trees_data = NA, true_change_points = NA, ...) {
 
 
   if(is.null(x_predict)) predict = FALSE
@@ -76,13 +76,15 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   # kappa_a = 16
   # kappa_b = 1/n_trees
   nu = hypers$df
-  sample_t = rep(0, p)
-  for(i in 1:p){
-    sample_t[i] = 1/(summary(lm(y[,i]~x))$sigma)^2
-  }
   # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
   qchi = qchisq(1-hypers$q, nu)
-  lambda = qchi/(nu * sample_t)
+  sigest = rep(0, p)
+  for(i in 1:p){
+    sigest[i] = summary(lm(y[,i]~x))$sigma
+  }
+  sigest = summary(lm(y~x))$sigma
+  lambda = (sigest^2)*qchi/nu
+  print(lambda)
 
   Psi = rInvWishart(1, r+1, diag(1,r))[,,1]
 
@@ -96,7 +98,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   accepted_trees <- lapply(vector(mode = "list", length = n_trees), as.list)
   change_id <- vector(mode = "list", length = n_trees)
 
-  tree_mu <- vector(mode = "list", length = thinned)
+  reg_mu <- vector(mode = "list", length = thinned)
   tree_phi <- vector(mode = "list", length = n_trees)
   omega_post <- vector(mode = "list", length = 0)
   omega_post2 <- vector(mode = "list", length = 0)
@@ -117,8 +119,8 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   accepted_trees <- lapply(seq_len(n_trees), function(x) accepted_trees[[x]] = df)
   change_id <- lapply(seq_len(n_trees), function(x) change_id[[x]] = rep(1, n))
 
-  tree_mu[[1]] = sapply(seq_len(n_trees), function(x) list(rMVN(mu = matrix(mu0, nrow=p), Q = kappa*diag(p))))
-  tree_phi = lapply(seq_len(n_trees), function(x) rep(tree_mu[[1]][[x]], n))
+  reg_mu[[1]] = sapply(seq_len(n_trees), function(x) list(rMVN(mu = matrix(mu0, nrow=p), Q = kappa*diag(p))))
+  tree_phi = lapply(seq_len(n_trees), function(x) rep(reg_mu[[1]][[x]], n))
 
   tree_prior <- lapply(seq_len(n_trees), function(x) tree_prior[x][[1]] = log(node_priors(0, prior_alpha, prior_beta)))
   # tree_accept <- lapply(seq_len(n_trees), function(x) tree_accept[x][[1]] = TRUE)
@@ -179,7 +181,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
       }
     }
 
-    tree_mu[[i]] = vector(mode = "list", n_trees)
+    reg_mu[[i]] = vector(mode = "list", n_trees)
 
     for(j in seq_len(n_trees)) {
 
@@ -194,32 +196,32 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
       if(length(tree_likely[[j]]) == 0) tree_likely[[j]] = log_marginal_likelihood(node_partial_res = y, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)
 
       ###----- Propose new tree -----###
-      df <- accepted_trees[[j]]
-      new_tree <- propose_tree(df, x, min_node, max_attempt, i) # Propose new tree for tree j
-      new_df <- new_tree$new_df
-      change_points <- new_tree$change_points # Get change points for new tree
-      decent_tree <- new_tree$decent_tree
-      # new_df = true_trees_data[[j]]
-      # change_points = get_change_points(new_df, x)
-      # decent_tree = TRUE
-      # accept = TRUE
+      # df <- accepted_trees[[j]]
+      # new_tree <- propose_tree(df, x, min_node, max_attempt, i) # Propose new tree for tree j
+      # new_df <- new_tree$new_df
+      # change_points <- new_tree$change_points # Get change points for new tree
+      # decent_tree <- new_tree$decent_tree
+      new_df = true_trees_data[[j]]
+      change_points = get_change_points(new_df, x)
+      decent_tree = TRUE
+      accept = TRUE
 
       ###----- Metropolis-Hastings for accepting/rejecting proposed tree -----###
-      accept = FALSE
-      if(decent_tree) {
-        p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
-        l2 = sum(sapply(split.data.frame(partial_res, change_points), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
-        p1 = tree_prior[[j]]
-        l1 = sum(sapply(split.data.frame(partial_res, change_id[[j]]), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)) #tree_likely[[j]]
-        ratio = (p2 + l2) - (p1 + l1)
-        accept = ratio >= 0 || - stats::rexp(1L) <= ratio
-      }
+      # accept = FALSE
+      # if(decent_tree) {
+      #   p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
+      #   l2 = sum(sapply(split.data.frame(partial_res, change_points), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
+      #   p1 = tree_prior[[j]]
+      #   l1 = sum(sapply(split.data.frame(partial_res, change_id[[j]]), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)) #tree_likely[[j]]
+      #   ratio = (p2 + l2) - (p1 + l1)
+      #   accept = ratio >= 0 || - stats::rexp(1L) <= ratio
+      # }
 
       ###----- Storing updated tree if accepted -----###
       if(accept) {
         accepted_trees[[j]] <- new_df
-        tree_prior[[j]] <- p2
-        tree_likely[[j]] <- l2
+        # tree_prior[[j]] <- p2
+        # tree_likely[[j]] <- l2
         change_id[[j]] <- change_points
       }
 
@@ -227,7 +229,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
       ##--Sample mu and compute phi, then store
       L_mu <- sim_mu(change_id[[j]], partial_res, kappa, new_omega)
       L_phi <- L_mu[change_id[[j]],, drop=FALSE]
-      tree_mu[[i]][[j]] <- L_mu
+      reg_mu[[i]][[j]] <- L_mu
       tree_phi[[j]] <- L_phi # Used to calculate partial res.
 
       ###----- Out-of-Sample Predictions -----###
@@ -244,23 +246,27 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
     y_hat = Reduce("+", tree_phi)
 
     #--Sample missing values
-    y_miss = update_y_miss_reg(x = x, y = y, m = m, z = z, y_hat = y_hat, B = new_B, R = new_R, omega = new_omega, include_x = include_x, include_y = include_y)
-    y[missing_index] = y_miss[missing_index]
+    if(include_y){
+      y_miss = update_y_miss_reg(x = x, y_hat = y_hat, m = m, z = z, B = new_B, R = new_R, omega = new_omega, include_x = include_x)
+    } else {
+      y_miss = multi_rMVN(mean_mat = y_hat, precision = omega)[missing_index]
+    }
+    # y_miss = update_y_miss_reg(x = x, y_hat = y_hat, m = m, y = y, z = z, B = new_B, R = new_R, omega = new_omega, include_x = include_x, include_y = include_y)[missing_index]
+
+    y[missing_index] = y_miss
     Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
 
     #--Sample data precision and kappa
     # new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
     new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
-    # new_omega2 = sim_omega(y = y[-missing_index,,drop=FALSE], y_hat = y_hat[-missing_index,,drop=FALSE], nu = nu, lambda = lambda)
-    # new_omega3 = sim_omega(y = y[missing_index,,drop=FALSE], y_hat = y_hat[missing_index,,drop=FALSE], nu = nu, lambda = lambda)
-    # kappa = sim_kappa(tree_mu[[i]], kappa_a, kappa_b)
+    # kappa = sim_kappa(reg_mu[[i]], kappa_a, kappa_b)
 
     ###----- Probit updates -----###
     z = update_z(Y, m, new_B, new_R)
 
     if(p==1){
       new_R = diag(1, p)
-      new_B = update_B(y, z, Y, sigma = new_R, tau_b = 0.01)
+      new_B = update_B(y, z, Y, tau_b = 0.01)
     } else {
       W = update_W(R = new_R, z = z)
       Sigma_gamma = update_sigma_gamma(p, Y, Psi, W)
@@ -270,10 +276,10 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
       new_R = RB$R
       new_B = RB$B
       D = RB$D
-    }
 
-    #--Sample Psi--#
-    Psi = update_Psi(r+1, diag(1,r), new_B, new_R)
+      #--Sample Psi--#
+      Psi = update_Psi(r+1, diag(1,r), new_B, new_R)
+    }
 
     ###----- Out-of-Sample Predictions -----###
     if(predict){
@@ -283,9 +289,15 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
 
     ###----- Store posterior samples after burn-in, accounting for thinning -----###
     if(i > burn && i%%thin == 0){
-      y_post = append(y_post, list(unscale(y_hat, min_y, max_y)))
-      y_impute = append(y_impute, list(unscale(y[missing_index], min_y, max_y)))
-      omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2)))
+      if(scale){
+        y_post = append(y_post, list(unscale(y_hat, min_y, max_y)))
+        y_impute = append(y_impute, list(unscale(y[missing_index], min_y, max_y)))
+        omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2)))
+      } else {
+        y_post = append(y_post, list((y_hat)))
+        y_impute = append(y_impute, list(y[missing_index]))
+        omega_post = append(omega_post, list(1/sqrt(new_omega)))
+      }
       R_post = append(R_post, list(new_R))
       B_post = append(B_post, list(new_B))
       if(predict) new_y_post = append(new_y_post, list(unscale(new_predictions, min_y, max_y)))
@@ -307,6 +319,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   return(list(y_post = y_post, omega_post = omega_post, R_post = R_post, B_post = B_post,
               new_y_post = new_y_post, accepted_trees = accepted_trees, y_impute = y_impute,
               burn = burn, iters = iters, thin = thin,
+              reg_mu = reg_mu,
               max_y = max_y, min_y = min_y,
               y_pred = y_pred,
               z_post = z_post,

@@ -25,7 +25,7 @@
 missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 50, burn = 1000, iters = 1000, thin = 3, predict = TRUE, MH_sd = 0.1,
                      tree_prior_params = tree_list(), hypers = hypers_list(),
                      scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10,
-                     pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = FALSE, true_trees_data, true_trees_missing, z_true, true_change_points, ...) {
+                     pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = FALSE, true_trees_data = NA, true_trees_missing = NA, z_true, true_change_points = NA, ...) {
 
   if(is.null(x_predict)) predict = FALSE
   y = as.matrix(y)
@@ -45,9 +45,9 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
   obs_index = which(!is.na(y))
   miss_row = apply(y, 1, function(x) any(is.na(x)))
 
+  min_y = apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
+  max_y = apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
   if(scale){
-    min_y = apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
-    max_y = apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
     y = t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
     if(nrow(y)==1) y = t(y)
   }
@@ -297,7 +297,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
       change_points = new_tree$change_points # Get change points for new tree
       decent_tree = new_tree$decent_tree
       # new_df = true_trees_missing[[k]]
-      # change_points = get_change_points(new_df, Y)
+      # change_points = true_change_points #get_change_points(new_df, Y)
       # decent_tree = TRUE
       # accept = TRUE
 
@@ -307,8 +307,6 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
         p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
         l2 = sum(sapply(split.data.frame(partial_res_z, change_points), log_marginal_likelihood, kappa = kappa_class, omega = new_R, mu0 = mu0, Vinv = Vinv, alpha = alpha))
         l1 = sum(sapply(split.data.frame(partial_res_z, class_change_id[[k]]), log_marginal_likelihood, kappa = kappa_class, omega = new_R, mu0 = mu0, Vinv = Vinv, alpha = alpha))
-        # get_change_points(accepted_class_trees[[k]], Y)
-        # l1 = class_likely[[k]]
         accept = MH(class_prior[[k]], l1, p2, l2)
       }
 
@@ -351,8 +349,8 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
     } else {
       # z = multi_rMVN(z_hat, diag(1,p))
     }
-    z[missing_index] = rtnorm(length(missing_index), mean = z_hat[missing_index], sd = 1, b = 0)
-    z[obs_index] = rtnorm(length(obs_index), mean = z_hat[obs_index], sd = 1, a = 0)
+    z[missing_index] = extraDistr::rtnorm(length(missing_index), mean = z_hat[missing_index], sd = 1, b = 0)
+    z[obs_index] = extraDistr::rtnorm(length(obs_index), mean = z_hat[obs_index], sd = 1, a = 0)
     # kappa_class = 1 #sim_kappa(mu = class_mu[[i]], a = 16, b = 1/n_class_trees)
 
     if(include_y){ # If include_y==FALSE, then we are assuming MAR. Missing y's can be "imputed" from the model.
@@ -360,7 +358,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
       y_miss = update_y_miss_BART(x = x, y = y, z = z, z_hat = z_hat, y_hat = y_hat, n_trees = n_class_trees,
                                   R = new_R, Omega = new_omega, missing_index = missing_index,
                                   accepted_class_trees = accepted_class_trees, class_mu_i = class_mu[[i]],
-                                  include_x = include_x, include_y = include_y, MH_sd = MH_sd)
+                                  include_x = include_x, include_y = include_y, MH_sd = MH_sd, true_change_points = true_change_points)
       y_miss_accept[i,] = y_miss$accept[missing_index]
       y[missing_index] = y_miss$y[missing_index]
     } else {
@@ -369,13 +367,12 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
 
     Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = FALSE)
 
-    if(i > 1 & n_class_trees > 1){
-      for(k in 1:n_class_trees){
-        class_change_id[[k]] = get_change_points(accepted_class_trees[[k]], Y)
-        L_mu = class_mu[[i]][[k]]
-        class_phi[[k]] = L_mu[class_change_id[[k]],, drop=FALSE]
-      }
+    for(k in 1:n_class_trees){
+      class_change_id[[k]] = get_change_points(accepted_class_trees[[k]], Y)
+      L_mu = class_mu[[i]][[k]]
+      class_phi[[k]] = L_mu[class_change_id[[k]],, drop=FALSE]
     }
+
     # z_hat = z = Reduce("+", class_phi)
     # if(p==1){
     #   z = matrix(stats::rnorm(n, mean=z_hat, sd=1), ncol=p, byrow=TRUE)
@@ -389,10 +386,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
     if(i > burn && i%%thin == 0){
       y_post = append(y_post, list(unscale(y_hat, min_y, max_y)))
       y_impute = append(y_impute, list(unscale(y[missing_index], min_y, max_y)))
-      # pred = multi_rMVN(y_hat, new_omega)
-      # pred[missing_index] = y[missing_index]
-      # y_pred = append(y_pred, list(pred))
-      omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2)))
+      omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2))) #list(1/sqrt(new_omega/(max_y - min_y)^2))
       z_post = append(z_post, list(z))
       kappa_reg_list = c(kappa_reg_list, kappa_reg)
 

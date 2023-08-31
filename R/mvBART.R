@@ -52,13 +52,22 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
   total_iters = burn + thin*iters
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
-  mu0 <- rep(hypers$mu0, p)
-  kappa = 2*sqrt(n_trees) #4*n_trees^2
-  alpha <- p + 1 #max(5, p + hypers$alpha)
-  sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
-  V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha))
-  # V = diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p) #diag(hypers$V, p)
-  Vinv <- solve(V)
+  mu0 = rep(hypers$mu0, p)
+  kappa = 16*n_trees
+  # alpha = p + 1
+  # sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
+  # V = diag(1/(summary(lm((y ~ x)))$sigma)^2, p)
+  # V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
+  # Vinv = solve(V)
+  nu = hypers$df
+  # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
+  qchi = qchisq(1-hypers$q, nu)
+  sigest = rep(0, p)
+  for(i in 1:p){
+    sigest[i] = summary(lm(y[,i]~x))$sigma
+  }
+  sigest = summary(lm(y~x))$sigma
+  lambda = (sigest^2)*qchi/nu
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha <- tree_prior_params$prior_alpha
@@ -98,7 +107,8 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
   y_post = vector(mode = "list", length = 0)
   y_pred = vector(mode = "list", length = 0)
 
-  new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), alpha = alpha, Vinv = Vinv)
+  # new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), alpha = alpha, Vinv = Vinv)
+  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict){
@@ -183,7 +193,8 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
     y_hat = Reduce("+", tree_phi)
 
     #--Sample data precision and kappa
-    new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
+    # new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
+    new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
     # kappa = sim_kappa(tree_mu[[i]], kappa_a, kappa_b)
 
     ###----- Out-of-Sample Predictions -----###
@@ -209,7 +220,7 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
                               new_y_post = new_y_post, accepted_trees = accepted_trees,
                               burn = burn, iters = iters, thin = thin,
                               max_y = max_y, min_y = min_y,
-                              y_pred = y_pred, y = y),
+                              y_pred = y_pred, y = y, tree_mu = tree_mu),
                          class = "BART")
 
   return(mvBART_out)

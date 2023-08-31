@@ -71,34 +71,56 @@ probit_predictors = function(x, y, include_x, include_y, intercept = FALSE){
   return(Y)
 }
 
+#' update latent variable z
+#'
+#' @param Y
+#' @param m
+#' @param B
+#' @param R
+#'
+#' @return
+#' @export
 #' @importFrom tmvtnorm "rtmvnorm"
+#'
+#' @examples
 update_z = function(Y, m, B, R){
   n = nrow(Y)
   p = ncol(m)
   mu = Y %*% B
-  U = diag(1, n)
-  m_lower = matrix(0, nrow = n, ncol = p)
-  m_lower[m==0] = -Inf
-  m_upper = matrix(0, nrow = n, ncol = p)
-  m_upper[m==1] = Inf
-
-  z = matrix(nrow = n, ncol = ncol(m))
-  for(i in 1:n){
-    z[i,] = rtmvnorm(n = p, mean = mu[i,], sigma = R, lower = m_lower[i,], upper = m_upper[i,])
+  # U = diag(1, n)
+  z = matrix(nrow = n, ncol = p)
+  if(p==1){
+    z[m==0] = extraDistr::rtnorm(length(which(m==0)), mean = mu[m==0], sd = 1, a = -Inf, b = 0)
+    z[m==1] = extraDistr::rtnorm(length(which(m==1)), mean = mu[m==1], sd = 1, a = 0, b = Inf)
+  } else {
+    m_lower = matrix(0, nrow = n, ncol = p)
+    m_lower[m==0] = -Inf
+    m_upper = matrix(0, nrow = n, ncol = p)
+    m_upper[m==1] = Inf
+    for(i in 1:n){
+      z[i,] = tmvtnorm::rtmvnorm(n = p, mean = mu[i,], sigma = R, lower = m_lower[i,], upper = m_upper[i,])
+    }
   }
-  # z[m==0] =  rtnorm(length(which(m==0)), mean = mu[m==0], sd = 1, b = 0)
-  # z[m==1] = rtnorm(length(which(m==1)), mean = mu[m==1], sd = 1, a = 0)
   return(z)
 }
 
 # MCMC sample of B, the matrix of probit parameters
-update_B = function(y, z, Y, sigma, tau_b){
-  k = ncol(Y)
+update_B = function(y, z, Y, tau_b){
+  r = ncol(Y)
   p = ncol(y)
   V = diag(p)
-  U = chol2inv(chol(diag(tau_b, k) + t(Y)%*%Y))
+  U = chol2inv(chol(diag(tau_b, r) + t(Y)%*%Y))
   M = t(t(z) %*% Y %*% U)
   return(matrnorm(M, U, V))
+  # b = colSums(sweep(Y, 1, z, "*"))
+  # y_sum = matrix(0, ncol = r, nrow = r)
+  # for(i in 1:nrow(y)){
+  #   y_sum = y_sum + Y[i,] %*% t(Y[i,])
+  # }
+  # Q = diag(tau_b, r) + y_sum
+  # mean = b %*% solve(Q)
+  # return(matrix(rMVN(mu = mean, Q = Q), ncol = 1))
+  # return(matrix(rMVNc(b = b, Q = Q), ncol = 1))
 }
 
 # MCMC sample of W, the latent variable in probit regression introduced by \cite{Talhouk, A., Doucet, A., & Murphy, K. (2012). Efficient Bayesian inference for multivariate probit models with sparse inverse correlation matrices. Journal of Computational and Graphical Statistics, 21(3), 739-757.}
@@ -154,36 +176,68 @@ update_Psi = function(nu, S, B, R){
 }
 
 # MCMC sample of missing data
-update_y_miss_reg <- function(x, y_hat, m, y, z, B, R, omega, include_x = TRUE, include_y = TRUE) {
-  M = apply(m, 2, as.logical)
-  n <- nrow(y_hat)
-  p <- ncol(y_hat)
-  q <- ncol(x)
-  if(include_x && !include_y) {
-    A   <- B[2:(q+1),, drop=FALSE]
-    B1  <- matrix(0, nrow=p, ncol=p)
-  } else if(!include_x && include_y) {
-    A   <- matrix(0, nrow=q, ncol=p)
-    B1  <- B[-1,, drop=FALSE]
-  } else if(include_x  && include_y) {
-    A   <- B[2:(q+1),, drop=FALSE]
-    B1  <- B[(q+2):(p+q+1),, drop=FALSE]
-  } else {
-    A   <- matrix(0, nrow=q, ncol=p)
-    B1  <- matrix(0, nrow=p, ncol=p)
-  }
-  b1    <- t(B[1,,drop=FALSE])
-  prec  <- omega + if(p == 1) tcrossprod(B1)/R else B1 %*% solve(R, t(B1))
-  Q     <- if(p == 1) sqrt(prec) else PD_chol(prec)
-  Oyhat <- tcrossprod(omega, y_hat)
-  zXA   <- if(include_x) z - x %*% A else z
-  BRinv <- B1 %*% chol2inv(PD_chol(R))
-  b     <- Oyhat + tcrossprod(BRinv, sweep(zXA, 2, b1, FUN="-", check.margin=FALSE))
-  Y     <- rMVNc(b, Q, is_chol=TRUE)
-  Y     <- if(p == 1) matrix(Y, ncol=p) else t(Y)
-  return(Y)
+# update_y_miss_reg <- function(x, y_hat, m, y, z, B, R, omega, include_x = TRUE, include_y = TRUE) {
+#   M = apply(m, 2, as.logical)
+#   n <- nrow(y_hat)
+#   p <- ncol(y_hat)
+#   q <- ncol(x)
+#   if(include_x && !include_y) {
+#     A   <- B[2:(q+1),, drop=FALSE]
+#     B1  <- matrix(0, nrow=p, ncol=p)
+#   } else if(!include_x && include_y) {
+#     A   <- matrix(0, nrow=q, ncol=p)
+#     B1  <- B[-1,, drop=FALSE]
+#   } else if(include_x  && include_y) {
+#     A   <- B[2:(q+1),, drop=FALSE]
+#     B1  <- B[(q+2):(p+q+1),, drop=FALSE]
+#   } else {
+#     A   <- matrix(0, nrow=q, ncol=p)
+#     B1  <- matrix(0, nrow=p, ncol=p)
+#   }
+#   b1    <- t(B[1,,drop=FALSE])
+#   prec  <- omega + if(p == 1) tcrossprod(B1)/R else B1 %*% solve(R, t(B1))
+#   Q     <- if(p == 1) sqrt(prec) else PD_chol(prec)
+#   Oyhat <- tcrossprod(omega, y_hat)
+#   zXA   <- if(include_x) z - x %*% A else z
+#   BRinv <- B1 %*% chol2inv(PD_chol(R))
+#   b     <- Oyhat + tcrossprod(BRinv, sweep(zXA, 2, b1, FUN="-", check.margin=FALSE))
+#   Y     <- rMVNc(b, Q, is_chol=TRUE)
+#   Y     <- if(p == 1) matrix(Y, ncol=p) else t(Y)
+#   return(Y)
+# }
+
+update_y_miss_reg <- function(x, y_hat, m, z, B, R, omega, include_x = TRUE) {
+  missing_index = which(m==0)
+  # n_miss = length(missing_index)
+  p = ncol(y_hat)
+  # q = ncol(x)
+  By = B[c((nrow(B)-p+1):nrow(B)),,drop=FALSE]
+  A = B[-c((nrow(B)-p+1):nrow(B)),,drop=FALSE]
+
+  X = if(include_x) cbind(rep(1,nrow(x)), x) else matrix(1, nrow = nrow(x), ncol = 1)
+  R_inv = chol2inv(PD_chol(R))
+  b = tcrossprod(omega, y_hat) + crossprod(t(By), tcrossprod(R_inv, (z - X %*% A))) #omega %*% t(y_hat) + By %*% solve(R) %*% t((z - X %*% A))
+  Q = omega + crossprod(t(By), crossprod(t(R_inv), By)) #By %*% R_inv %*% By
+  # y_miss = t(rMVNc(b, Q))[missing_index]
+  mu = if(p==1) t(b) %*% chol2inv(PD_chol(Q)) else chol2inv(PD_chol(Q)) %*% t(b)
+  y_miss = multi_rMVN(mean_mat = mu, precision = Q)[missing_index]
+  # y_miss = matrix(ncol = p, nrow = n_miss)
+  # for(i in 1:n_miss){
+  #   miss_i = missing_index[i]
+  #   X1 = if(include_x) matrix(c(1, x[miss_i,]), ncol=1) else matrix(1)
+  #   b = y_hat[miss_i,] %*% omega + By %*% chol2inv(PD_chol(R)) %*% (z[miss_i,] - t(A) %*% X1)
+  #   Q = omega + By %*% chol2inv(PD_chol(R)) %*% By
+  #   y_miss[i,] = rMVNc(b = b, Q = Q)
+  # }
+  return(y_miss)
 }
 
+# update_y_miss_reg <- function(x, y_hat, m, y, z, B, R, omega, include_x = TRUE, include_y = TRUE) {
+#   prec = omega + (B[2,])^2
+#   mu = (y_hat%*%omega + (z - B[1,])%*%B[2,])/as.vector(prec) #((y_hat - B[1,]*B[2,])*as.vector(omega) + z*B[2,])/as.vector(prec)
+#   Y = matrix(rnorm(nrow(mu), mu, 1/sqrt(prec)), ncol=1)
+#   return(Y)
+# }
 
 # Get vector for sorting observations into terminal nodes
 get_change_points <- function(df, x) {
@@ -233,7 +287,7 @@ get_change_points <- function(df, x) {
   return(change_points)
 }
 
-update_y_miss_BART = function(x, y, z, z_hat, y_hat, n_trees, R, Omega, missing_index, accepted_class_trees, class_mu_i, include_x, include_y, MH_sd = 0.2){
+update_y_miss_BART = function(x, y, z, z_hat, y_hat, n_trees, R, Omega, missing_index, accepted_class_trees, class_mu_i, include_x, include_y, MH_sd = 0.2, true_change_points){
   n = nrow(y)
   p = ncol(y)
   q = ncol(x)
@@ -248,8 +302,12 @@ update_y_miss_BART = function(x, y, z, z_hat, y_hat, n_trees, R, Omega, missing_
   Y = probit_predictors(x = x, y = proposed_y, include_x = include_x, include_y = include_y)
   z_hat = matrix(0, nrow=n, ncol=p)
   for(k in 1:n_trees){
-    # MH_change_id = get_change_points(accepted_class_trees[[k]], rbind(probit_predictors(x = x, y = y, include_x = include_x, include_y = include_y), Y))[-c(1:n)]
-    MH_change_id = get_change_points(accepted_class_trees[[k]], Y)
+    MH_change_id = get_change_points(accepted_class_trees[[k]], rbind(probit_predictors(x = x, y = y, include_x = include_x, include_y = include_y), Y))[-c(1:n)]
+    # MH_change_id = get_change_points(accepted_class_trees[[k]], Y)
+    if(length(unique(MH_change_id)) != nrow(class_mu_i[[k]])) {
+      print(MH_change_id)
+      print(class_mu_i[[k]])
+    }
     z_hat = z_hat + class_mu_i[[k]][MH_change_id,, drop=FALSE]
   }
   if(p==1){
