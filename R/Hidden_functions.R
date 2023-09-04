@@ -303,6 +303,7 @@ update_y_miss_BART = function(x, y, z, z_hat, y_hat, n_trees, R, Omega, missing_
   z_hat = matrix(0, nrow=n, ncol=p)
   for(k in 1:n_trees){
     MH_change_id = get_change_points(accepted_class_trees[[k]], rbind(probit_predictors(x = x, y = y, include_x = include_x, include_y = include_y), Y))[-c(1:n)]
+    # MH_change_id = true_change_points
     # MH_change_id = get_change_points(accepted_class_trees[[k]], Y)
     if(length(unique(MH_change_id)) != nrow(class_mu_i[[k]])) {
       print(MH_change_id)

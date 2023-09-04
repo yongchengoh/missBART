@@ -25,7 +25,7 @@
 missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 50, burn = 1000, iters = 1000, thin = 3, predict = TRUE, MH_sd = 0.1,
                      tree_prior_params = tree_list(), hypers = hypers_list(),
                      scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10,
-                     pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = FALSE, true_trees_data = NA, true_trees_missing = NA, z_true, true_change_points = NA, ...) {
+                     pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = FALSE, true_trees_data = NA, true_trees_missing = NA, z_true, true_change_points = NA, true_change_points_miss = NA, ...) {
 
   if(is.null(x_predict)) predict = FALSE
   y = as.matrix(y)
@@ -68,16 +68,6 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
   # V = diag(1/(summary(lm((y ~ x)))$sigma)^2, p)
   # V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
   # Vinv = solve(V)
-  nu = hypers$df
-  # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
-  qchi = qchisq(1-hypers$q, nu)
-  sigest = rep(0, p)
-  for(i in 1:p){
-    sigest[i] = summary(lm(y[,i]~x))$sigma
-  }
-  sigest = summary(lm(y~x))$sigma
-  lambda = (sigest^2)*qchi/nu
-  # curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 4)
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha = tree_prior_params$prior_alpha
@@ -169,9 +159,19 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
   z[m==0] = -3
 
   Y = probit_predictors(x, y, include_x = include_x, include_y = include_y)
+
+  nu = hypers$df
+  # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
+  qchi = qchisq(1-hypers$q, nu)
+  sigest = rep(0, p)
+  for(i in 1:p){
+    sigest[i] = summary(lm(y[,i]~x))$sigma
+  }
+  lambda = (sigest^2)*qchi/nu
+  # curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 4)
   # new_omega = sim_omega(y = y, y_hat = Reduce("+", reg_phi), alpha = alpha, Vinv = Vinv)
   new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p) #sim_omega(y = y, y_hat = Reduce("+", reg_phi), nu = nu, lambda = lambda)
-  # curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 2000)
+  curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 2)
 
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
@@ -228,7 +228,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
       change_points = new_tree$change_points # Get change points for new tree
       decent_tree = new_tree$decent_tree
       # new_df = true_trees_data[[j]]
-      # change_points = get_change_points(new_df, x)
+      # change_points = true_change_points[,j] #get_change_points(new_df, x)
       # decent_tree = TRUE
       # accept = TRUE
 
@@ -297,7 +297,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
       change_points = new_tree$change_points # Get change points for new tree
       decent_tree = new_tree$decent_tree
       # new_df = true_trees_missing[[k]]
-      # change_points = true_change_points #get_change_points(new_df, Y)
+      # change_points = true_change_points_miss #get_change_points(new_df, Y)
       # decent_tree = TRUE
       # accept = TRUE
 
@@ -358,7 +358,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
       y_miss = update_y_miss_BART(x = x, y = y, z = z, z_hat = z_hat, y_hat = y_hat, n_trees = n_class_trees,
                                   R = new_R, Omega = new_omega, missing_index = missing_index,
                                   accepted_class_trees = accepted_class_trees, class_mu_i = class_mu[[i]],
-                                  include_x = include_x, include_y = include_y, MH_sd = MH_sd, true_change_points = true_change_points)
+                                  include_x = include_x, include_y = include_y, MH_sd = MH_sd, true_change_points = true_change_points_miss)
       y_miss_accept[i,] = y_miss$accept[missing_index]
       y[missing_index] = y_miss$y[missing_index]
     } else {
@@ -384,9 +384,18 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
 
     ###----- Store posterior samples after burn-in, accounting for thinning -----###
     if(i > burn && i%%thin == 0){
-      y_post = append(y_post, list(unscale(y_hat, min_y, max_y)))
-      y_impute = append(y_impute, list(unscale(y[missing_index], min_y, max_y)))
-      omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2))) #list(1/sqrt(new_omega/(max_y - min_y)^2))
+      # y_post = append(y_post, list(unscale(y_hat, min_y, max_y)))
+      # y_impute = append(y_impute, list(unscale(y[missing_index], min_y, max_y)))
+      # omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2))) #list(1/sqrt(new_omega/(max_y - min_y)^2))
+      if(scale){
+        y_post = append(y_post, list(unscale(y_hat, min_y, max_y)))
+        y_impute = append(y_impute, list(unscale(y[missing_index], min_y, max_y)))
+        omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2)))
+      } else {
+        y_post = append(y_post, list((y_hat)))
+        y_impute = append(y_impute, list(y[missing_index]))
+        omega_post = append(omega_post, list(1/sqrt(new_omega)))
+      }
       z_post = append(z_post, list(z))
       kappa_reg_list = c(kappa_reg_list, kappa_reg)
 

@@ -10,11 +10,13 @@ License: GPL (>=2)
 Encoding: UTF-8
 LazyData: true
 BugReports: https://github.com/yongchengoh/missBART
-Imports: Matrix, 
+Imports: 
+  Matrix, 
   CholWishart,
   extraDistr,
   MASS,
-  purrr
+  purrr,
+  tmvtnorm
 RoxygenNote: 7.2.3
 Suggests: 
     knitr,
