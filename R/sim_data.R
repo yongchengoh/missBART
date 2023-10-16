@@ -16,14 +16,16 @@
 #' y = y_original = data$y
 #' x = data$x
 #' ome = data$ome
-sim_data_friedman = function(n, p = 1, scale_par = 1, omega_diag = 1) {
+sim_data_friedman = function(n, p = 1, scale_par = 1, omega_diag = 1, Omega = NULL) {
   # Simulate some data using a multivariate version of Friedman
   # y = 10sin(πx1x2)+20(x3−0.5)2+10x4+5x5+ε
   X = matrix(NA, nrow = n, ncol = 5)
   for(i in 1:ncol(X)) X[,i] = stats::runif(n) #stats::rnorm(n, 0, 1)
   # pars = matrix(stats::rnorm(5 * p, sd = scale_par), ncol = p, nrow = 5) # 5 parameters on p dimensions
   y = mean = matrix(NA, ncol = p, nrow = n)
-  Omega = stats::rWishart(1, p+1, diag(omega_diag, p))[,,1]
+  if((is.null(Omega))){
+    Omega = stats::rWishart(1, p+1, diag(omega_diag, p))[,,1]
+  }
   if(p > 1) {
     err = mvrnorm(n, mu=rep(0, ncol(Omega)), Sigma = solve(Omega))
   } else {
@@ -58,10 +60,11 @@ sim_data_friedman = function(n, p = 1, scale_par = 1, omega_diag = 1) {
 #' x = data$x
 #' ome = data$ome
 #' true_trees_data = data$true_trees
-sim_data_trees = function(n, p, q, min_x = 0, max_x = 1, trees = 1, ...){
+sim_data_trees = function(n, p, q, min_x = 0, max_x = 1, trees = 1, ome = NULL, ...){
   x = matrix(stats::runif(n*q, min = min_x, max = max_x), ncol = q)
   sum_mu = matrix(0, ncol = p, nrow = n)
-  ome = diag(1, p) #stats::rWishart(1, p+1, diag(1,p))[,,1]
+  ome = ifelse(is.null(ome), stats::rWishart(1, p+1, diag(1,p))[,,1], ome)  #stats::rWishart(1, p+1, diag(1,p))[,,1]
+  if(all(dim(ome) == p) || !is.matrix(ome)) stop("ome must be a pxp matrix")
   kappa = 16*trees
   true_trees = vector(mode = "list", length = trees)
   for(i in 1:trees){

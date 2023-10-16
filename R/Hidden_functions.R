@@ -403,6 +403,18 @@ unscale = function(scaled_val, min, max){
   return(unscaled)
 }
 
+scale_bart = function(data, min = NULL, max = NULL){
+  if(is.matrix(data)){
+    if(is.null(min)) min = apply(data, 2, min, na.rm=TRUE)
+    if(is.null(max)) max = apply(data, 2, max, na.rm=TRUE)
+  } else {
+    if(is.null(min)) min = min(data, na.rm=TRUE)
+    if(is.null(max)) max = max(data, na.rm=TRUE)
+  }
+  scaled_val = (data - min)/(max - min) - 0.5
+  return(scaled_val)
+}
+
 pdp_param_mat_list = function(x, y_range = c(-0.5, 0.5), grid_len = 20, intercept = FALSE, include_x = TRUE, n){ # Returns a list of size n (n pdp lines)
   y_grid = seq(y_range[1], y_range[2], length = grid_len)
   if(include_x){

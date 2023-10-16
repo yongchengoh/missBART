@@ -148,6 +148,15 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
 
   new_R = diag(1, p)
 
+  nu = hypers$df
+  # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
+  qchi = qchisq(1-hypers$q, nu)
+  sigest = rep(0, p)
+  for(i in 1:p){
+    sigest[i] = summary(lm(y[,i]~x))$sigma
+  }
+  lambda = (sigest^2)*qchi/nu
+
   if(mice_impute){
     imputed = as.matrix(mice::complete(mice::mice(cbind(y, x), print=FALSE)))[,1:p]
     y[missing_index] = imputed[missing_index]
@@ -160,19 +169,10 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
 
   Y = probit_predictors(x, y, include_x = include_x, include_y = include_y)
 
-  nu = hypers$df
-  # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
-  qchi = qchisq(1-hypers$q, nu)
-  sigest = rep(0, p)
-  for(i in 1:p){
-    sigest[i] = summary(lm(y[,i]~x))$sigma
-  }
-  lambda = (sigest^2)*qchi/nu
-  # curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 4)
+  curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 500)
   # new_omega = sim_omega(y = y, y_hat = Reduce("+", reg_phi), alpha = alpha, Vinv = Vinv)
   new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p) #sim_omega(y = y, y_hat = Reduce("+", reg_phi), nu = nu, lambda = lambda)
-  curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 2)
-
+  # curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 2)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict){
@@ -389,12 +389,21 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
       # omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2))) #list(1/sqrt(new_omega/(max_y - min_y)^2))
       if(scale){
         y_post = append(y_post, list(unscale(y_hat, min_y, max_y)))
-        y_impute = append(y_impute, list(unscale(y[missing_index], min_y, max_y)))
-        omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2)))
+        if(p==1){
+          y_impute = append(y_impute, list(unscale(y[missing_index], min_y, max_y)))
+          omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2)))
+        } else {
+          y_impute = append(y_impute, list(unscale(y, min_y, max_y)[missing_index]))
+          omega_post = append(omega_post, list(chol2inv(chol(new_omega))))
+        }
       } else {
         y_post = append(y_post, list((y_hat)))
         y_impute = append(y_impute, list(y[missing_index]))
-        omega_post = append(omega_post, list(1/sqrt(new_omega)))
+        if(p==1){
+          omega_post = append(omega_post, list(1/sqrt(new_omega)))
+        } else {
+          omega_post = append(omega_post, list(chol2inv(chol(new_omega))))
+        }
       }
       z_post = append(z_post, list(z))
       kappa_reg_list = c(kappa_reg_list, kappa_reg)
