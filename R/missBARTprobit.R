@@ -145,8 +145,14 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
     sigest[i] = summary(lm(y[,i]~x))$sigma
   }
   lambda = (sigest^2)*qchi/nu
+  # nu = 100 #c(10, 100, 500)
+  # lambda = 0.01449275
   # new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), alpha = alpha, Vinv = Vinv)
   new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
+  print(paste("nu=", nu))
+  print(paste("lambda=", lambda))
+  print(paste("E(sd_original_scale)=", 1/sqrt(1/lambda/(max_y - min_y)^2)))
+  curve(dgamma(x, shape = nu/2, rate = nu*lambda/2), from = 0, to = 200)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict){
@@ -247,7 +253,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
     if(include_y){
       y_miss = update_y_miss_reg(x = x, y_hat = y_hat, m = m, z = z, B = new_B, R = new_R, omega = new_omega, include_x = include_x)
     } else {
-      y_miss = multi_rMVN(mean_mat = y_hat, precision = omega)[missing_index]
+      y_miss = multi_rMVN(mean_mat = y_hat, precision = new_omega)[missing_index]
     }
     # y_miss = update_y_miss_reg(x = x, y_hat = y_hat, m = m, y = y, z = z, B = new_B, R = new_R, omega = new_omega, include_x = include_x, include_y = include_y)[missing_index]
 

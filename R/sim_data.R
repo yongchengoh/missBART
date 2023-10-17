@@ -63,14 +63,15 @@ sim_data_friedman = function(n, p = 1, scale_par = 1, omega_diag = 1, Omega = NU
 sim_data_trees = function(n, p, q, min_x = 0, max_x = 1, trees = 1, ome = NULL, ...){
   x = matrix(stats::runif(n*q, min = min_x, max = max_x), ncol = q)
   sum_mu = matrix(0, ncol = p, nrow = n)
-  ome = ifelse(is.null(ome), stats::rWishart(1, p+1, diag(1,p))[,,1], ome)  #stats::rWishart(1, p+1, diag(1,p))[,,1]
-  if(all(dim(ome) == p) || !is.matrix(ome)) stop("ome must be a pxp matrix")
+  if(is.null(ome)) ome = stats::rWishart(1, p+1, diag(1,p))[,,1]
+  # ome = ifelse(is.null(ome), stats::rWishart(1, p+1, diag(1,p))[,,1], ome)  #stats::rWishart(1, p+1, diag(1,p))[,,1]
+  if(!all(dim(ome) == p) || !is.matrix(ome)) stop("ome must be a pxp matrix")
   kappa = 16*trees
   true_trees = vector(mode = "list", length = trees)
   for(i in 1:trees){
-    df1 <- data.frame(matrix(ncol = 7, nrow = 1))
-    colnames(df1) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
-    df1[1,] <- c(0,0,1,0,1,0,0)
+    df1 <- data.frame(matrix(ncol = 8, nrow = 1))
+    colnames(df1) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction", "NA_direction")
+    df1[1,] <- c(0,0,1,0,1,0,0,NA)
     n_splits = sample(seq(1,5), 1)
     mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
     for(j in 1:n_splits){
@@ -189,9 +190,9 @@ sim_missing_trees = function(x, y, trees = 1, include_x = FALSE, include_y = TRU
   for(seed in sample(seq(1000,100000),size = 10000)){
     set.seed(seed)
     for(i in 1:trees){
-      df2 = data.frame(matrix(ncol = 7, nrow = 1))
-      colnames(df2) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
-      df2[1,] = c(0,0,1,0,1,0,0)
+      df2 = data.frame(matrix(ncol = 8, nrow = 1))
+      colnames(df2) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction", "NA_direction")
+      df2[1,] = c(0,0,1,0,1,0,0,NA)
       n_splits = 2
       # n_splits = sample(seq(2, 3), 1)
       for(j in 1:n_splits){
