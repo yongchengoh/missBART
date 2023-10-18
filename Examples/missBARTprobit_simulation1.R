@@ -5,10 +5,11 @@ devtools::load_all()
 # set.seed(5555)
 set.seed(10000)
 n = 500
-data = sim_data_trees(n, 1, 1, ome = diag(10,1)) #mlbench::mlbench.friedman1(n, sd = 5)
+data = sim_data_trees(n, 1, 1, ome = diag(0.5,1)) #mlbench::mlbench.friedman1(n, sd = 5)
 y = y_original = matrix(data$y, ncol = 1)
 x = data$x
 true_sd = 1/sqrt(data$ome)
+true_sd
 range(y)
 
 # y = y_original = scale_bart(y)
@@ -30,7 +31,7 @@ points(x[missing_index], y_original[missing_index], col = "red")
 # points(x, y_hat)
 
 # TRAIN/TEST SPLIT
-split_prop = 0.5
+split_prop = 0.6
 n_train = round(n*split_prop)
 n_test = n - n_train
 train_id = sample(seq(1,n), n_train)
@@ -41,8 +42,8 @@ x_test = x[test_id,,drop=FALSE]
 y_test = y[test_id,,drop=FALSE]
 
 ## MODEL 1
-model1 = missBARTprobit(x = x_train, y = y_train, predict = TRUE, n_trees = 100,
-                        burn = 500, iters = 1000, thin = 1, x_predict = x_test,
+model1 = missBARTprobit(x = x_train, y = y_train, predict = TRUE, n_trees = 90,
+                        burn = 500, iters = 1000, thin = 2, x_predict = x_test,
                         show_progress = TRUE, scale = TRUE, make_pdp = FALSE,
                         pdp_range = c(pdp_range1, pdp_range2),
                         include_x = TRUE, include_y = FALSE,
@@ -72,6 +73,7 @@ ggplot(data = model1_data, aes(true, pred)) + geom_point() +
   xlim(min(model1_data), max(model1_data)) +
   ylim(min(model1_data), max(model1_data))
 
+quantile(unlist(model1$omega_post), c(0.25, 0.75))
 true_sd <= quantile(unlist(model1$omega_post), 0.75) & true_sd >= quantile(unlist(model1$omega_post), 0.25)
 
 # plot(y_original[missing_index], Reduce("+", model1$y_impute)/length(model1$y_impute), xlim = range(y_original), ylim = range(y_original), ylab = "y_missBART[missing_index]")

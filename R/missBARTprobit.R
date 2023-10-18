@@ -127,6 +127,23 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   new_R = diag(1, p)
   D = diag(1, p)
 
+  nu = hypers$df
+  # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
+  # qchi = qchisq(1-hypers$q, nu)
+  sigest = rep(0, p)
+  for(i in 1:p){
+    sigest[i] = summary(lm(y[,i]~x))$sigma
+  }
+  lambda = uniroot(function(x) pgamma(1/(sigest)^2, shape = nu/2, rate = nu*x/2) - (1-hypers$q), interval = c(0,50))$root
+  # lambda = (sigest^2)*qchi/nu
+  # new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), alpha = alpha, Vinv = Vinv)
+  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
+  print(paste("nu =", nu))
+  print(paste("lambda =", lambda))
+  print(paste("sd_ols", sigest*(max_y - min_y)))
+  print(paste("E(sd_original_scale) =", 1/sqrt(1/lambda/(max_y - min_y)^2)))
+  curve(dgamma(x, shape = nu/2, rate = nu*lambda/2), from = 0, to = 100)
+
   if(mice_impute){
     imputed = mice::complete(mice::mice(cbind(y, x), print = FALSE))[,1:p]
     y[missing_index] = imputed[missing_index]
@@ -136,23 +153,6 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   z = matrix(rep(1, n*p), nrow=n, ncol=p)
   z[missing_index] = -1
   Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
-
-  nu = hypers$df
-  # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
-  qchi = qchisq(1-hypers$q, nu)
-  sigest = rep(0, p)
-  for(i in 1:p){
-    sigest[i] = summary(lm(y[,i]~x))$sigma
-  }
-  lambda = (sigest^2)*qchi/nu
-  # nu = 100 #c(10, 100, 500)
-  # lambda = 0.01449275
-  # new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), alpha = alpha, Vinv = Vinv)
-  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
-  print(paste("nu=", nu))
-  print(paste("lambda=", lambda))
-  print(paste("E(sd_original_scale)=", 1/sqrt(1/lambda/(max_y - min_y)^2)))
-  curve(dgamma(x, shape = nu/2, rate = nu*lambda/2), from = 0, to = 200)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict){
