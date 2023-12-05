@@ -60,19 +60,20 @@ sim_data_friedman = function(n, p = 1, scale_par = 1, omega_diag = 1, Omega = NU
 #' x = data$x
 #' ome = data$ome
 #' true_trees_data = data$true_trees
-sim_data_trees = function(n, p, q, min_x = 0, max_x = 1, trees = 1, ome = NULL, ...){
+sim_data_trees = function(n, p, q, min_x = 0, max_x = 1, trees = 1, ome = NULL, kappa = NULL, splits = NULL, ...){
   x = matrix(stats::runif(n*q, min = min_x, max = max_x), ncol = q)
   sum_mu = matrix(0, ncol = p, nrow = n)
   if(is.null(ome)) ome = stats::rWishart(1, p+1, diag(1,p))[,,1]
   # ome = ifelse(is.null(ome), stats::rWishart(1, p+1, diag(1,p))[,,1], ome)  #stats::rWishart(1, p+1, diag(1,p))[,,1]
   if(!all(dim(ome) == p) || !is.matrix(ome)) stop("ome must be a pxp matrix")
-  kappa = 16*trees
+  if(is.null(kappa)) kappa = 16*trees
   true_trees = vector(mode = "list", length = trees)
+  n_splits = splits
   for(i in 1:trees){
     df1 <- data.frame(matrix(ncol = 8, nrow = 1))
     colnames(df1) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction", "NA_direction")
     df1[1,] <- c(0,0,1,0,1,0,0,NA)
-    n_splits = sample(seq(1,5), 1)
+    if(is.null(splits)) n_splits = sample(seq(1,5), 1)
     mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
     for(j in 1:n_splits){
       new_tree = propose_tree(df1, x, min_node = 20, max_attempt = 10, i = 2)
@@ -111,17 +112,19 @@ sim_missing = function(x, y, include_x = FALSE, include_y = FALSE, min_missing_p
   } else if (include_x & include_y){
     r = 1 + p + q
   }
-  corR = diag(0.5,p)
-  # psd = FALSE
-  # while(!psd){
-  #   corR[upper.tri(corR)] = sample(seq(-1,1,length=100), sum(seq_len(p-1)))
-  #   corR[lower.tri(corR)] = t(corR)[lower.tri(corR)]
-  #   psd = all(eigen(corR)$values >= 0)
-  # }
+  corR = diag(1, p)
+  psd = FALSE
+  while(!psd){
+    corR[upper.tri(corR)] = sample(seq(-1,1,length=100), sum(seq_len(p-1)))
+    corR[lower.tri(corR)] = t(corR)[lower.tri(corR)]
+    psd = all(eigen(corR)$values >= 0)
+  }
+
+  Psi_1 = rInvWishart(1, r+1, diag(1,r))[,,1]
 
   for(seed in sample(seq(1000,100000), size = 10000)){
     set.seed(seed)
-    Psi_1 = diag(1,r) #rInvWishart(1, r+1, diag(10,r))[,,1]
+
     B = matrnorm(matrix(0, nrow=r, ncol=p), Psi_1, corR)
     if(include_x & !include_y){
       phi = cbind(rep(1, n), x) %*% B

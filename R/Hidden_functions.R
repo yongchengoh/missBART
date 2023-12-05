@@ -40,12 +40,21 @@ sim_mu <- function(change_points, partial_res, kappa, omega) {
 #   }
 #   return(omega)
 # }
-sim_omega = function(y, y_hat, nu, lambda){
+sim_omega = function(y, y_hat, nu = NULL, lambda = NULL, alpha = NULL, Vinv = NULL){
   n = nrow(y)
   p = ncol(y)
-  shape = (nu + n)/2
-  rate = (colSums((y - y_hat)^2) + nu*lambda)/2
-  return(diag(rgamma(p, shape, rate), p))
+  if(ncol(y)==1){
+    if(is.null(nu) || is.null(lambda)) stop("Must specify values for nu and lambda")
+    shape = (nu + n)/2
+    rate = (colSums((y - y_hat)^2) + nu*lambda)/2
+    omega = diag(stats::rgamma(p, shape, rate), p)
+  } else {
+  if(is.null(alpha) || is.null(Vinv)) stop("Must specify values for alpha and Vinv")
+  df = alpha + n
+  scale = chol2inv(chol(crossprod(y-y_hat) + Vinv))
+  omega = stats::rWishart(1, df, scale)[,,1]
+  }
+  return(omega)
 }
 
 sim_kappa = function(mu, a, b){ #tree_mu[[i]]
@@ -97,10 +106,15 @@ update_z = function(Y, m, B, R){
     m_lower[m==0] = -Inf
     m_upper = matrix(0, nrow = n, ncol = p)
     m_upper[m==1] = Inf
+    # for(i in 1:p){
+    #   z[,i] = extraDistr::rtnorm(n, mean = mu[,i], sd = 1, a = m_lower[,i], b = m_upper[,i])
+    # }
     for(i in 1:n){
-      z[i,] = tmvtnorm::rtmvnorm(n = p, mean = mu[i,], sigma = R, lower = m_lower[i,], upper = m_upper[i,])
+      # z[i,] = tmvtnorm::rtmvnorm(n = 1, mean = mu[i,], sigma = R, lower = m_lower[i,], upper = m_upper[i,], algorithm = "gibbs")
+      z[i,] = TruncatedNormal::rtmvnorm(n = 1, mu = mu[i,], sigma = R, lb = m_lower[i,], ub = m_upper[i,])
     }
   }
+
   return(z)
 }
 
@@ -213,14 +227,15 @@ update_y_miss_reg <- function(x, y_hat, m, z, B, R, omega, include_x = TRUE) {
   # q = ncol(x)
   By = B[c((nrow(B)-p+1):nrow(B)),,drop=FALSE]
   A = B[-c((nrow(B)-p+1):nrow(B)),,drop=FALSE]
-
   X = if(include_x) cbind(rep(1,nrow(x)), x) else matrix(1, nrow = nrow(x), ncol = 1)
   R_inv = chol2inv(PD_chol(R))
   b = tcrossprod(omega, y_hat) + crossprod(t(By), tcrossprod(R_inv, (z - X %*% A))) #omega %*% t(y_hat) + By %*% solve(R) %*% t((z - X %*% A))
-  Q = omega + crossprod(t(By), crossprod(t(R_inv), By)) #By %*% R_inv %*% By
-  # y_miss = t(rMVNc(b, Q))[missing_index]
-  mu = if(p==1) t(b) %*% chol2inv(PD_chol(Q)) else chol2inv(PD_chol(Q)) %*% t(b)
+  Q = omega + By %*% R_inv %*% t(By) #crossprod(t(By), crossprod(t(R_inv), By)) #By %*% R_inv %*% By
+  # print(Q)
+  mu = t(b) %*% chol2inv(PD_chol(Q)) #if(p==1) t(b) %*% chol2inv(PD_chol(Q)) else (chol2inv(PD_chol(Q)) %*% t(b))
+  # print((mu))
   y_miss = multi_rMVN(mean_mat = mu, precision = Q)[missing_index]
+
   # y_miss = matrix(ncol = p, nrow = n_miss)
   # for(i in 1:n_miss){
   #   miss_i = missing_index[i]
@@ -346,7 +361,8 @@ update_y_miss_BART = function(x, y, z, z_hat, y_hat, n_trees, R, Omega, missing_
 log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
   n = nrow(node_partial_res)
   p = ncol(node_partial_res)
-  C = sum(apply(node_partial_res, 1, function(x) crossprod(crossprod(omega, x), x)))
+  # C = sum(apply(node_partial_res, 1, function(x) crossprod(crossprod(omega, x), x)))
+  C = sum(rowSums((node_partial_res %*% t(omega)) * node_partial_res))
 
   vec = omega %*% colSums(node_partial_res) + kappa*mu0
   mat = n*omega + diag(kappa, p)
@@ -373,7 +389,7 @@ tree_priors <- function(nodes, parents, depth, prior_alpha, prior_beta) {
   depth <- as.numeric(depth)
   node_prob <- rep(NA, length=length(nodes))
   for(i in seq_along(nodes)) {
-    node_prob[i] <- log(ifelse(nodes[i] %in% parents, node_priors(depth[i], prior_alpha, prior_beta), 1 - node_priors(depth[i], prior_alpha, prior_beta)))
+    node_prob[i] <- log(ifelse(nodes[i] %in% parents, node_priors(depth[i], prior_alpha, prior_beta), 1-node_priors(depth[i], prior_alpha, prior_beta)))
   }
   return(sum(node_prob))
 }

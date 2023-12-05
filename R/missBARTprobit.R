@@ -66,8 +66,8 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   m[is.na(y)] = 0
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
-  mu0 <- rep(hypers$mu0, p)
-  kappa = 16*n_trees
+  mu0 = rep(hypers$mu0, p)
+  kappa = 16*n_trees #3*n_trees
   # alpha <- p + 1 #max(5, p + hypers$alpha)
   # sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
   # V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
@@ -91,8 +91,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   reg_mu <- vector(mode = "list", length = thinned)
   tree_phi <- vector(mode = "list", length = n_trees)
   omega_post <- vector(mode = "list", length = 0)
-  omega_post2 <- vector(mode = "list", length = 0)
-  omega_post3 <- vector(mode = "list", length = 0)
+  new_omega_list <- vector(mode = "list", length = 0)
 
   tree_prior <- lapply(vector(mode = "list", length = n_trees), as.list) # tree prior for accepted trees
   tree_likely <- lapply(vector(mode = "list", length = n_trees), as.list) # likelihood for accepted trees
@@ -128,21 +127,30 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   D = diag(1, p)
 
   nu = hypers$df
-  # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
-  # qchi = qchisq(1-hypers$q, nu)
+  qchi = qchisq(1-hypers$q, nu)
   sigest = rep(0, p)
   for(i in 1:p){
     sigest[i] = summary(lm(y[,i]~x))$sigma
   }
-  lambda = uniroot(function(x) pgamma(1/(sigest)^2, shape = nu/2, rate = nu*x/2) - (1-hypers$q), interval = c(0,50))$root
-  # lambda = (sigest^2)*qchi/nu
-  # new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), alpha = alpha, Vinv = Vinv)
+  lambda = (sigest^2)*qchi/nu
   new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
   print(paste("nu =", nu))
   print(paste("lambda =", lambda))
-  print(paste("sd_ols", sigest*(max_y - min_y)))
-  print(paste("E(sd_original_scale) =", 1/sqrt(1/lambda/(max_y - min_y)^2)))
-  curve(dgamma(x, shape = nu/2, rate = nu*lambda/2), from = 0, to = 100)
+  if(p==1){
+    print(paste("sd_ols", (sigest*(max_y - min_y))))
+    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))))
+  } else {
+    print(paste("sd_ols", (sigest*(max_y - min_y))^2))
+    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
+    alpha = p+1 #nu
+    V = diag(1,p) #diag(1/(lambda*alpha), p)
+    Vinv = solve(V)
+    print(paste("V"))
+    print(V)
+  }
+  for(j in 1:p){
+    curve(dgamma(x, shape = nu/2, rate = nu*lambda[j]/2), from = 0, to = 100)
+  }
 
   if(mice_impute){
     imputed = mice::complete(mice::mice(cbind(y, x), print = FALSE))[,1:p]
@@ -252,6 +260,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
     #--Sample missing values
     if(include_y){
       y_miss = update_y_miss_reg(x = x, y_hat = y_hat, m = m, z = z, B = new_B, R = new_R, omega = new_omega, include_x = include_x)
+      # y_miss = true_y_miss[missing_index]
     } else {
       y_miss = multi_rMVN(mean_mat = y_hat, precision = new_omega)[missing_index]
     }
@@ -261,13 +270,15 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
     Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
 
     #--Sample data precision and kappa
-    # new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
-    new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
+    if(p==1){
+      new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
+    } else {
+      new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
+    }
     # kappa = sim_kappa(reg_mu[[i]], kappa_a, kappa_b)
 
     ###----- Probit updates -----###
     z = update_z(Y, m, new_B, new_R)
-
     if(p==1){
       new_R = diag(1, p)
       new_B = update_B(y, z, Y, tau_b = 0.01)
@@ -295,13 +306,23 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
     if(i > burn && i%%thin == 0){
       if(scale){
         y_post = append(y_post, list(unscale(y_hat, min_y, max_y)))
-        y_impute = append(y_impute, list(unscale(y[missing_index], min_y, max_y)))
-        omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2)))
+        y_impute = append(y_impute, list(unscale(y, min_y, max_y)[missing_index]))
+        if(p==1){
+          omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2)))  # returns the residual sd on the original scale
+        } else {
+          # omega_post = append(omega_post, list(diag(1/(diag(new_omega)/(max_y - min_y)^2), p)))   # returns the residual covariance matrix on the original scale
+          omega_post = append(omega_post, list(diag(chol2inv(chol(new_omega)))*(max_y - min_y)^2))
+        }
       } else {
         y_post = append(y_post, list((y_hat)))
         y_impute = append(y_impute, list(y[missing_index]))
-        omega_post = append(omega_post, list(1/sqrt(new_omega)))
+        if(p==1){
+          omega_post = append(omega_post, list(1/sqrt(new_omega)))
+        } else {
+          omega_post = append(omega_post, list(chol2inv(chol(new_omega))))
+        }
       }
+      new_omega_list = append(new_omega_list, list(new_omega))
       R_post = append(R_post, list(new_R))
       B_post = append(B_post, list(new_B))
       if(predict) new_y_post = append(new_y_post, list(unscale(new_predictions, min_y, max_y)))
@@ -326,6 +347,8 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
               max_y = max_y, min_y = min_y,
               y_pred = y_pred,
               z_post = z_post,
-              pdp_out = pdp_out))
+              pdp_out = pdp_out,
+              kappa = kappa,
+              new_omega_list = new_omega_list))
 }
 

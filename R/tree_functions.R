@@ -20,7 +20,7 @@
 #' df[1,] <- c(0,0,1,0,1,0,0)
 #' x <- matrix(stats::runif(9), ncol=3)
 #' propose_tree(df, x, min_node = 1, max_attempt = 1, i = 1)
-propose_tree = function(df, x, min_node, max_attempt = 50, i, probit = FALSE, miss_row = NA, cat_list = NA) {
+propose_tree = function(df, x, min_node, max_attempt = 10, i, probit = FALSE, miss_row = NA, cat_list = NA) {
   n = nrow(x)
   x_vars = seq_len(ncol(x))
   if(nrow(df) == 1) {
