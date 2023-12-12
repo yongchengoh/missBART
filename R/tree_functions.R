@@ -35,7 +35,7 @@ propose_tree = function(df, x, min_node, max_attempt = 10, i, probit = FALSE, mi
     #   upper = max(x[,grow_variable], na.rm = TRUE)
     # }
     # df$split_variable[1] = grow_variable
-  } else if(i<=5){
+  } else if(i<2){
     MOVE = "GROW"
   } else if(max(df$depth) == 3) {
     #-If tree is not a stump, we can randomly choose to grow or prune the tree

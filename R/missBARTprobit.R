@@ -67,7 +67,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 = rep(hypers$mu0, p)
-  kappa = 16*n_trees #3*n_trees
+  kappa = 4*(qnorm(0.9))^2*n_trees #3*n_trees
   # alpha <- p + 1 #max(5, p + hypers$alpha)
   # sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
   # V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
@@ -142,8 +142,8 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   } else {
     print(paste("sd_ols", (sigest*(max_y - min_y))^2))
     print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
-    alpha = p+1 #nu
-    V = diag(1,p) #diag(1/(lambda*alpha), p)
+    alpha = nu
+    V = diag(1/(lambda*alpha), p)
     Vinv = solve(V)
     print(paste("V"))
     print(V)
@@ -153,7 +153,7 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   }
 
   if(mice_impute){
-    imputed = mice::complete(mice::mice(cbind(y, x), print = FALSE))[,1:p]
+    imputed = as.matrix(mice::complete(mice::mice(cbind(y, x), print = FALSE))[,1:p])
     y[missing_index] = imputed[missing_index]
   } else {
     y[missing_index] = 0
@@ -221,10 +221,10 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
       ###----- Metropolis-Hastings for accepting/rejecting proposed tree -----###
       accept = FALSE
       if(decent_tree) {
-        p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
-        l2 = sum(sapply(split.data.frame(partial_res, change_points), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
+        p2 = tree_priors(new_df = new_df, prior_alpha, prior_beta)
+        l2 = sum(sapply(split.data.frame(partial_res, change_points), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0))
         p1 = tree_prior[[j]]
-        l1 = sum(sapply(split.data.frame(partial_res, change_id[[j]]), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)) #tree_likely[[j]]
+        l1 = sum(sapply(split.data.frame(partial_res, change_id[[j]]), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0)) #tree_likely[[j]]
         ratio = (p2 + l2) - (p1 + l1)
         accept = ratio >= 0 || - stats::rexp(1L) <= ratio
       }

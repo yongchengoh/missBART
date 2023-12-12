@@ -20,7 +20,7 @@
 #'
 #' @examples
 mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000, thin = 3, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
-                           scale = TRUE, show_progress = TRUE, progress_every = 10, ...) {
+                           scale = TRUE, show_progress = TRUE, progress_every = 10, true_trees_data = NA,...) {
 
   if(is.null(x_predict)) predict = FALSE
   y = as.matrix(y)
@@ -38,10 +38,13 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
 
   min_y = apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
   max_y = apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
-  if(scale){
-    y = t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
-    if(nrow(y)==1) y = t(y)
-  }
+  # if(scale){
+  #   y = t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
+  #   if(nrow(y)==1) y = t(y)
+  # }
+  mean_y = colMeans(y, na.rm=TRUE)
+  sd_y = apply(y, 2, sd, na.rm = TRUE)
+  y = t(apply(sweep(y, 2, mean_y), 1, function(x) x/(sd_y)))
 
   #####-------------------- GET PARAMETERS --------------------#####
   p = ncol(y) # No. of y variables
@@ -54,20 +57,31 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 = rep(hypers$mu0, p)
   kappa = 16*n_trees
-  # alpha = p + 1
-  # sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
-  # V = diag(1/(summary(lm((y ~ x)))$sigma)^2, p)
-  # V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
+  # alpha = 3
+  # V = diag(1, p)
   # Vinv = solve(V)
   nu = hypers$df
-  # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
   qchi = qchisq(1-hypers$q, nu)
   sigest = rep(0, p)
   for(i in 1:p){
     sigest[i] = summary(lm(y[,i]~x))$sigma
   }
-  sigest = summary(lm(y~x))$sigma
   lambda = (sigest^2)*qchi/nu
+  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
+  # print(paste("nu =", nu))
+  # print(paste("lambda =", lambda))
+  if(p==1){
+    # print(paste("sd_ols", (sigest*(max_y - min_y))))
+    # print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))))
+  } else {
+    # print(paste("sd_ols", (sigest*(max_y - min_y))^2))
+    # print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
+    alpha = p+1 #nu
+    V = diag(1,p) #diag(1/(lambda*alpha), p)
+    Vinv = solve(V)
+    # print(paste("V"))
+    # print(V)
+  }
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha <- tree_prior_params$prior_alpha
@@ -108,7 +122,7 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
   y_pred = vector(mode = "list", length = 0)
 
   # new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), alpha = alpha, Vinv = Vinv)
-  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
+  new_omega = rWishart(1, alpha, V)[,,1] #diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict){
@@ -152,21 +166,29 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
       new_df <- new_tree$new_df
       change_points <- new_tree$change_points # Get change points for new tree
       decent_tree <- new_tree$decent_tree
+      # new_df = true_trees_data[[j]]
+      # change_points = get_change_points(new_df, x)
+      # decent_tree = TRUE
+      # accept = TRUE
 
       ###----- Metropolis-Hastings for accepting/rejecting proposed tree -----###
       if(decent_tree) {
-        p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
-        l2 = sum(sapply(split.data.frame(partial_res, change_points), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
+        p2 = tree_priors(new_df = new_df, prior_alpha, prior_beta)
+        l2 = sum(sapply(split.data.frame(partial_res, change_points),
+                        log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
         p1 = tree_prior[[j]]
-        l1 = sum(sapply(split.data.frame(partial_res, change_id[[j]]), log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)) #tree_likely[[j]]
+
+        l1 = sum(sapply(split.data.frame(partial_res, change_id[[j]]),
+                        log_marginal_likelihood, kappa = kappa, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)) #tree_likely[[j]]
         ratio = (p2 + l2) - (p1 + l1)
-        tree_accept[[j]][[i]] = ratio >= 0 || - stats::rexp(1L) <= ratio
+        accept = ratio >= 0 || - stats::rexp(1L) <= ratio
+        tree_accept[[j]][[i]] = accept
       } else {
         tree_accept[[j]][[i]] = FALSE
       }
 
       ###----- Storing updated tree if accepted -----###
-      if(tree_accept[[j]][[i]]) {
+      if(accept) {
         accepted_trees[[j]] <- new_df
         tree_prior[[j]] <- p2
         tree_likely[[j]] <- l2
@@ -193,8 +215,8 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
     y_hat = Reduce("+", tree_phi)
 
     #--Sample data precision and kappa
-    # new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
-    new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
+    new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
+    # new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
     # kappa = sim_kappa(tree_mu[[i]], kappa_a, kappa_b)
 
     ###----- Out-of-Sample Predictions -----###
@@ -219,7 +241,7 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
   mvBART_out = structure(list(y_post = y_post, omega_post = omega_post,
                               new_y_post = new_y_post, accepted_trees = accepted_trees,
                               burn = burn, iters = iters, thin = thin,
-                              max_y = max_y, min_y = min_y,
+                              max_y = max_y, min_y = min_y, mean_y = mean_y, sd_y = sd_y,
                               y_pred = y_pred, y = y, tree_mu = tree_mu),
                          class = "BART")
 

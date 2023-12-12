@@ -358,25 +358,50 @@ update_y_miss_BART = function(x, y, z, z_hat, y_hat, n_trees, R, Omega, missing_
 #   B = sum(diag(Vinv %*% omega))
 #   return((n + alpha - p - 1)/2 * log(det_omega) - 0.5*(B + C - A))
 # }
+# log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
+#   n = nrow(node_partial_res)
+#   p = ncol(node_partial_res)
+#   # C = sum(apply(node_partial_res, 1, function(x) crossprod(crossprod(omega, x), x)))
+#   C = sum(rowSums((node_partial_res %*% t(omega)) * node_partial_res))
+#
+#   vec = omega %*% colSums(node_partial_res) + kappa*mu0
+#   mat = n*omega + diag(kappa, p)
+#   vec2 = solve(mat, vec)
+#   A = crossprod(vec2, vec)
+#
+#   if(p==1){
+#     det_omega = omega
+#     det_mat = mat
+#   } else {
+#     det_omega = det(omega)
+#     det_mat = det(mat)
+#   }
+#   return(n*det_omega/2 + 0.5*kappa^p - 0.5 * det_mat - 0.5*(C - A))
+# }
+
 log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
   n = nrow(node_partial_res)
   p = ncol(node_partial_res)
-  # C = sum(apply(node_partial_res, 1, function(x) crossprod(crossprod(omega, x), x)))
-  C = sum(rowSums((node_partial_res %*% t(omega)) * node_partial_res))
 
-  vec = omega %*% colSums(node_partial_res) + kappa*mu0
-  mat = n*omega + diag(kappa, p)
-  vec2 = solve(mat, vec)
-  A = crossprod(vec2, vec)
+  Sigma_mu_inv = n*omega + diag(kappa,p)
+  Sigma_mu = chol2inv(chol(Sigma_mu_inv))
+
+  mu_mu = Sigma_mu %*% (omega %*% colSums(node_partial_res) + diag(kappa, p) %*% mu0)
+
+  A = crossprod(crossprod(diag(kappa, p), mu0), mu0) #t(mu0) %*% diag(kappa, p) %*% mu0
+  B = crossprod(crossprod(Sigma_mu_inv, mu_mu), mu_mu) #t(mu_mu) %*% Sigma_mu_inv %*% mu_mu
+  C = sum(rowSums((node_partial_res %*% t(omega)) * node_partial_res)) #sum(apply(node_partial_res, 1, function(x) t(x) %*% omega %*% x))
 
   if(p==1){
     det_omega = omega
-    det_mat = mat
+    det_Sigma_mu = Sigma_mu
   } else {
     det_omega = det(omega)
-    det_mat = det(mat)
+    det_Sigma_mu = det(Sigma_mu)
   }
-  return(n*det_omega/2 + 0.5*kappa^p - 0.5 * det_mat - 0.5*(C - A))
+  # -(n*p/2)*log(2*pi) + p/2 * log(kappa) +
+  loglik = p/2 * log(kappa) + n/2 * log(det_omega) + log(det_Sigma_mu)/2 - 0.5*(A - B + C)
+  return(loglik)
 }
 
 # Compute tree priors at the node level
@@ -385,8 +410,11 @@ node_priors <- function(depth, prior_alpha, prior_beta) {
 }
 
 # Compute tree priors
-tree_priors <- function(nodes, parents, depth, prior_alpha, prior_beta) {
-  depth <- as.numeric(depth)
+tree_priors <- function(new_df, prior_alpha, prior_beta) {
+  nodes = row.names(new_df)
+  parents = unique(new_df$parent)
+  depth = as.numeric(new_df$depth)
+
   node_prob <- rep(NA, length=length(nodes))
   for(i in seq_along(nodes)) {
     node_prob[i] <- log(ifelse(nodes[i] %in% parents, node_priors(depth[i], prior_alpha, prior_beta), 1-node_priors(depth[i], prior_alpha, prior_beta)))

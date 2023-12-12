@@ -125,7 +125,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
   accepted_reg_trees = lapply(seq_len(n_reg_trees), function(x) accepted_reg_trees[[x]] = df)
   reg_change_id = lapply(seq_len(n_reg_trees), function(x) reg_change_id[[x]] = rep(1, n))
 
-  kappa_reg = 16*n_reg_trees  #2*sqrt(n_reg_trees)
+  kappa_reg = ifelse(is.null(hypers$kappa), 16*n_reg_trees, hypers$kappa) #2*sqrt(n_reg_trees)
   kappa_reg_list = c()
 
   reg_mu[[1]] = sapply(seq_len(n_reg_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = kappa_reg*diag(p))))
@@ -146,32 +146,49 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
   class_prior = lapply(seq_len(n_class_trees), function(x) class_prior[x][[1]] = log(node_priors(0, prior_alpha, prior_beta)))
   class_accept = lapply(seq_len(n_class_trees), function(x) class_accept[x][[1]] = TRUE) #do the thing please
 
-  new_R = diag(1, p)
-
+  if(mice_impute){
+    imputed = as.matrix(mice::complete(mice::mice(cbind(y, x), print = FALSE))[,1:p])
+    y[missing_index] = imputed[missing_index]
+  } else {
+    y[missing_index] = 0
+  }
   nu = hypers$df
-  # lambda = (sqrt(2/nu)*qnorm(1-hypers$q) + 1)/sample_t
   qchi = qchisq(1-hypers$q, nu)
   sigest = rep(0, p)
   for(i in 1:p){
     sigest[i] = summary(lm(y[,i]~x))$sigma
   }
   lambda = (sigest^2)*qchi/nu
-
-  if(mice_impute){
-    imputed = as.matrix(mice::complete(mice::mice(cbind(y, x), print=FALSE)))[,1:p]
-    y[missing_index] = imputed[missing_index]
+  print(paste("nu =", nu))
+  print(paste("lambda =", lambda))
+  if(p==1){
+    print(paste("sd_ols", (sigest*(max_y - min_y))))
+    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))))
   } else {
-    y[missing_index] = 0
+    print(paste("sd_ols", (sigest*(max_y - min_y))^2))
+    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
+    
+    alpha = ifelse(is.null(hypers$alpha), nu, hypers$alpha)
+    if(is.null(hypers$V)) {V = diag(1/(lambda*alpha), p)} else {V = hypers$V}
+    Vinv = solve(V)
+    
+    print(paste("V"))
+    print(V)
+  }
+  for(j in 1:p){
+    curve(dgamma(x, shape = nu/2, rate = nu*lambda[j]/2), from = 0, to = 100)
   }
 
-  z = matrix(3, ncol = p, nrow = n)
-  z[m==0] = -3
+  z = matrix(1, ncol = p, nrow = n)
+  z[m==0] = -1
 
+  new_R = diag(1, p)
+  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
   Y = probit_predictors(x, y, include_x = include_x, include_y = include_y)
 
-  curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 500)
+  # curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 500)
   # new_omega = sim_omega(y = y, y_hat = Reduce("+", reg_phi), alpha = alpha, Vinv = Vinv)
-  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p) #sim_omega(y = y, y_hat = Reduce("+", reg_phi), nu = nu, lambda = lambda)
+  # new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p) #sim_omega(y = y, y_hat = Reduce("+", reg_phi), nu = nu, lambda = lambda)
   # curve(dgamma(x, shape = nu/2, rate = (nu*lambda/2), log=FALSE), from = 0, to = 2)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
@@ -234,7 +251,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
 
       accept = FALSE
       if(decent_tree){
-        p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
+        p2 = tree_priors(new_df = new_df, prior_alpha, prior_beta)
         l2 = sum(sapply(split.data.frame(partial_res_y, change_points), log_marginal_likelihood, kappa = kappa_reg, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha))
         p1 = reg_prior[[j]]
         l1 = sum(sapply(split.data.frame(partial_res_y, reg_change_id[[j]]), log_marginal_likelihood, kappa = kappa_reg, omega = new_omega, mu0 = mu0, Vinv = Vinv, alpha = alpha)) #tree_likely[[j]]
@@ -271,8 +288,8 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
     y_hat = Reduce("+", reg_phi)
 
     #--Sample data precision
-    # new_omega = sim_omega(y, y_hat, alpha = alpha, Vinv = Vinv)
-    new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
+    new_omega = sim_omega(y, y_hat, alpha = alpha, Vinv = Vinv)
+    # new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
     # kappa_reg = sim_kappa(mu = reg_mu[[i]], a = 16, b = 1/n_reg_trees)
 
     ###----- Probit BART -----###
@@ -304,7 +321,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
       ###----- Metropolis-Hastings for accepting/rejecting proposed tree -----###
       accept = FALSE
       if(decent_tree){
-        p2 = tree_priors(nodes = row.names(new_df), parents = unique(new_df$parent), depth = new_df$depth, prior_alpha, prior_beta)
+        p2 = tree_priors(new_df = new_df, prior_alpha, prior_beta)
         l2 = sum(sapply(split.data.frame(partial_res_z, change_points), log_marginal_likelihood, kappa = kappa_class, omega = new_R, mu0 = mu0, Vinv = Vinv, alpha = alpha))
         l1 = sum(sapply(split.data.frame(partial_res_z, class_change_id[[k]]), log_marginal_likelihood, kappa = kappa_class, omega = new_R, mu0 = mu0, Vinv = Vinv, alpha = alpha))
         accept = MH(class_prior[[k]], l1, p2, l2)
@@ -394,7 +411,8 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
           omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2)))
         } else {
           y_impute = append(y_impute, list(unscale(y, min_y, max_y)[missing_index]))
-          omega_post = append(omega_post, list(chol2inv(chol(new_omega))))
+          # omega_post = append(omega_post, list(chol2inv(chol(new_omega))))
+          omega_post = append(omega_post, list(diag(chol2inv(chol(new_omega)))*(max_y - min_y)^2))
         }
       } else {
         y_post = append(y_post, list((y_hat)))
@@ -406,7 +424,7 @@ missBART2 = function(x, y, x_predict = c(), n_reg_trees = 150, n_class_trees = 5
         }
       }
       z_post = append(z_post, list(z))
-      kappa_reg_list = c(kappa_reg_list, kappa_reg)
+      # kappa_reg_list = c(kappa_reg_list, kappa_reg)
 
       if(predict){
         new_pred_mean = Reduce("+", reg_phi_pred)
