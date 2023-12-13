@@ -24,9 +24,9 @@
 #' x <- matrix(runif(6), ncol = 2)
 #' y <- matrix(runif(6), ncol = 2) %*% matrix(rnorm(4), ncol=2)
 #' missBARTprobit(x, y, n_trees = 2, burn = 2, iters = 2, thin = 1, scale = FALSE)
-missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, iters = 1000, thin = 3, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
-                           scale = TRUE, include_x = TRUE, include_y = TRUE,
-                          show_progress = TRUE, progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = FALSE,
+missBARTprobit = function(x, y, x_predict = c(), n_trees = 100, burn = 1000, iters = 1000, thin = 2, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
+                          scale = TRUE, include_x = TRUE, include_y = TRUE,
+                          show_progress = TRUE, progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = TRUE,
                           true_trees_data = NA, true_change_points = NA, ...) {
 
 
@@ -65,18 +65,41 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   m = matrix(1, nrow=n, ncol=p)
   m[is.na(y)] = 0
 
+  #####-------------------- FIRST IMPUTATION OF DATA --------------------#####
+  if(mice_impute){
+    imputed = as.matrix(mice::complete(mice::mice(cbind(y, x), print = FALSE))[,1:p])
+    y[missing_index] = imputed[missing_index]
+  } else {
+    y[missing_index] = 0
+  }
+
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 = rep(hypers$mu0, p)
-  kappa = 4*(qnorm(0.9))^2*n_trees #3*n_trees
-  # alpha <- p + 1 #max(5, p + hypers$alpha)
-  # sample_t = 1/(apply(y, 2, sd, na.rm=TRUE))^2
-  # V = -diag(sample_t, p)/(1.28*sqrt(2*max(4, alpha))-max(4, alpha)) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
-  # V = diag(n_trees, p) #diag(1/(apply(y, 2, sd, na.rm=TRUE))^2/alpha, p)
-  # Vinv = solve(V)
-  # kappa_a = 16
-  # kappa_b = 1/n_trees
+  kappa = ifelse(is.null(hypers$kappa), 4*(qnorm(0.9))^2*n_trees, hypers$kappa)
 
-  Psi = rInvWishart(1, r+1, diag(1,r))[,,1]
+  nu = hypers$df
+  qchi = qchisq(1-hypers$q, nu)
+  sigest = rep(0, p)
+  for(i in 1:p){
+    sigest[i] = summary(lm(y[,i]~x))$sigma
+  }
+  lambda = (sigest^2)*qchi/nu
+  # print(paste("nu =", nu))
+  # print(paste("lambda =", lambda))
+  if(p==1){
+    print(paste("sd_ols", (sigest*(max_y - min_y))^2))
+    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
+  } else {
+    print(paste("sd_ols", (sigest*(max_y - min_y))^2))
+    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
+
+    alpha = ifelse(is.null(hypers$alpha), nu, hypers$alpha)
+    if(is.null(hypers$V)) {V = diag(1/(lambda*alpha), p)} else {V = hypers$V}
+    Vinv = solve(V)
+  }
+  # for(j in 1:p){
+  #   curve(dgamma(x, shape = nu/2, rate = nu*lambda[j]/2), from = 0, to = 100)
+  # }
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha <- tree_prior_params$prior_alpha
@@ -114,6 +137,8 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   tree_prior <- lapply(seq_len(n_trees), function(x) tree_prior[x][[1]] = log(node_priors(0, prior_alpha, prior_beta)))
   # tree_accept <- lapply(seq_len(n_trees), function(x) tree_accept[x][[1]] = TRUE)
 
+  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
+
   #####-------------------- CREATE STORAGE AND SET INITIAL VALUES FOR PROBIT MODEL --------------------#####
   B_post = vector(mode = "list", length = 0)
   R_post = vector(mode = "list", length = 0)
@@ -125,39 +150,8 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
   new_B = matrix(0, ncol=p, nrow=r) #matrix(rnorm(r*p, mean = 0, sd = 1/sqrt(tau_b)), ncol = p)
   new_R = diag(1, p)
   D = diag(1, p)
+  Psi = rInvWishart(1, r+1, diag(1,r))[,,1]
 
-  nu = hypers$df
-  qchi = qchisq(1-hypers$q, nu)
-  sigest = rep(0, p)
-  for(i in 1:p){
-    sigest[i] = summary(lm(y[,i]~x))$sigma
-  }
-  lambda = (sigest^2)*qchi/nu
-  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
-  print(paste("nu =", nu))
-  print(paste("lambda =", lambda))
-  if(p==1){
-    print(paste("sd_ols", (sigest*(max_y - min_y))))
-    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))))
-  } else {
-    print(paste("sd_ols", (sigest*(max_y - min_y))^2))
-    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
-    alpha = nu
-    V = diag(1/(lambda*alpha), p)
-    Vinv = solve(V)
-    print(paste("V"))
-    print(V)
-  }
-  for(j in 1:p){
-    curve(dgamma(x, shape = nu/2, rate = nu*lambda[j]/2), from = 0, to = 100)
-  }
-
-  if(mice_impute){
-    imputed = as.matrix(mice::complete(mice::mice(cbind(y, x), print = FALSE))[,1:p])
-    y[missing_index] = imputed[missing_index]
-  } else {
-    y[missing_index] = 0
-  }
   z = matrix(rep(1, n*p), nrow=n, ncol=p)
   z[missing_index] = -1
   Y = probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
@@ -308,16 +302,16 @@ missBARTprobit = function(x, y, x_predict = c(), n_trees = 150, burn = 1000, ite
         y_post = append(y_post, list(unscale(y_hat, min_y, max_y)))
         y_impute = append(y_impute, list(unscale(y, min_y, max_y)[missing_index]))
         if(p==1){
-          omega_post = append(omega_post, list(1/sqrt(new_omega/(max_y - min_y)^2)))  # returns the residual sd on the original scale
+          omega_post = append(omega_post, list(1/(new_omega/(max_y - min_y)^2)))  # returns the residual variance on the original scale
         } else {
-          # omega_post = append(omega_post, list(diag(1/(diag(new_omega)/(max_y - min_y)^2), p)))   # returns the residual covariance matrix on the original scale
-          omega_post = append(omega_post, list(diag(chol2inv(chol(new_omega)))*(max_y - min_y)^2))
+          # omega_post = append(omega_post, list(diag(1/(diag(new_omega)/(max_y - min_y)^2), p)))
+          omega_post = append(omega_post, list(diag(chol2inv(chol(new_omega)))*(max_y - min_y)^2)) # returns the residual covariance matrix on the original scale
         }
       } else {
         y_post = append(y_post, list((y_hat)))
         y_impute = append(y_impute, list(y[missing_index]))
         if(p==1){
-          omega_post = append(omega_post, list(1/sqrt(new_omega)))
+          omega_post = append(omega_post, list(1/(new_omega)))
         } else {
           omega_post = append(omega_post, list(chol2inv(chol(new_omega))))
         }

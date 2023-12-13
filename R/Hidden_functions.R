@@ -49,10 +49,10 @@ sim_omega = function(y, y_hat, nu = NULL, lambda = NULL, alpha = NULL, Vinv = NU
     rate = (colSums((y - y_hat)^2) + nu*lambda)/2
     omega = diag(stats::rgamma(p, shape, rate), p)
   } else {
-  if(is.null(alpha) || is.null(Vinv)) stop("Must specify values for alpha and Vinv")
-  df = alpha + n
-  scale = chol2inv(chol(crossprod(y-y_hat) + Vinv))
-  omega = stats::rWishart(1, df, scale)[,,1]
+    if(is.null(alpha) || is.null(Vinv)) stop("Must specify values for alpha and Vinv")
+    df = alpha + n
+    scale = chol2inv(chol(crossprod(y-y_hat) + Vinv))
+    omega = stats::rWishart(1, df, scale)[,,1]
   }
   return(omega)
 }

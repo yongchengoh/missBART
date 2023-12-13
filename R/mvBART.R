@@ -19,8 +19,8 @@
 #' @export
 #'
 #' @examples
-mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000, thin = 3, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
-                           scale = TRUE, show_progress = TRUE, progress_every = 10, true_trees_data = NA,...) {
+mvBART = function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 1000, thin = 2, predict = TRUE, tree_prior_params = tree_list(), hypers = hypers_list(),
+                  scale = TRUE, show_progress = TRUE, progress_every = 10, true_trees_data = NA,...) {
 
   if(is.null(x_predict)) predict = FALSE
   y = as.matrix(y)
@@ -36,15 +36,12 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
     }
   }
 
-  min_y = apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
-  max_y = apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
-  # if(scale){
-  #   y = t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
-  #   if(nrow(y)==1) y = t(y)
-  # }
-  mean_y = colMeans(y, na.rm=TRUE)
-  sd_y = apply(y, 2, sd, na.rm = TRUE)
-  y = t(apply(sweep(y, 2, mean_y), 1, function(x) x/(sd_y)))
+  min_y = apply(y, 2, min, na.rm = TRUE)
+  max_y = apply(y, 2, max, na.rm = TRUE)
+  if(scale){
+    y = t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y-min_y))) - 0.5
+    if(nrow(y)==1) y = t(y)
+  }
 
   #####-------------------- GET PARAMETERS --------------------#####
   p = ncol(y) # No. of y variables
@@ -56,10 +53,8 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 = rep(hypers$mu0, p)
-  kappa = 16*n_trees
-  # alpha = 3
-  # V = diag(1, p)
-  # Vinv = solve(V)
+  kappa = 4*(qnorm(0.9))^2*n_trees
+
   nu = hypers$df
   qchi = qchisq(1-hypers$q, nu)
   sigest = rep(0, p)
@@ -67,21 +62,22 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
     sigest[i] = summary(lm(y[,i]~x))$sigma
   }
   lambda = (sigest^2)*qchi/nu
-  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
   # print(paste("nu =", nu))
   # print(paste("lambda =", lambda))
   if(p==1){
-    # print(paste("sd_ols", (sigest*(max_y - min_y))))
-    # print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))))
+    print(paste("sd_ols", (sigest*(max_y - min_y))^2))
+    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
   } else {
-    # print(paste("sd_ols", (sigest*(max_y - min_y))^2))
-    # print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
-    alpha = p+1 #nu
-    V = diag(1,p) #diag(1/(lambda*alpha), p)
+    print(paste("sd_ols", (sigest*(max_y - min_y))^2))
+    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
+
+    alpha = ifelse(is.null(hypers$alpha), nu, hypers$alpha)
+    if(is.null(hypers$V)) {V = diag(1/(lambda*alpha), p)} else {V = hypers$V}
     Vinv = solve(V)
-    # print(paste("V"))
-    # print(V)
   }
+  # for(j in 1:p){
+  #   curve(dgamma(x, shape = nu/2, rate = nu*lambda[j]/2), from = 0, to = 100)
+  # }
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha <- tree_prior_params$prior_alpha
@@ -121,8 +117,7 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
   y_post = vector(mode = "list", length = 0)
   y_pred = vector(mode = "list", length = 0)
 
-  # new_omega = sim_omega(y = y, y_hat = Reduce("+", tree_phi), alpha = alpha, Vinv = Vinv)
-  new_omega = rWishart(1, alpha, V)[,,1] #diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
+  new_omega = diag(rgamma(p, shape = nu/2, rate = nu*lambda/2), p)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict){
@@ -184,7 +179,7 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
         accept = ratio >= 0 || - stats::rexp(1L) <= ratio
         tree_accept[[j]][[i]] = accept
       } else {
-        tree_accept[[j]][[i]] = FALSE
+        tree_accept[[j]][[i]] = accept = FALSE
       }
 
       ###----- Storing updated tree if accepted -----###
@@ -215,8 +210,11 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
     y_hat = Reduce("+", tree_phi)
 
     #--Sample data precision and kappa
-    new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
-    # new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
+    if(p==1){
+      new_omega = sim_omega(y = y, y_hat = y_hat, nu = nu, lambda = lambda)
+    } else {
+      new_omega = sim_omega(y = y, y_hat = y_hat, alpha = alpha, Vinv = Vinv)
+    }
     # kappa = sim_kappa(tree_mu[[i]], kappa_a, kappa_b)
 
     ###----- Out-of-Sample Predictions -----###
@@ -241,7 +239,7 @@ mvBART = function(x, y, x_predict = NA, n_trees = 150, burn = 1000, iters = 1000
   mvBART_out = structure(list(y_post = y_post, omega_post = omega_post,
                               new_y_post = new_y_post, accepted_trees = accepted_trees,
                               burn = burn, iters = iters, thin = thin,
-                              max_y = max_y, min_y = min_y, mean_y = mean_y, sd_y = sd_y,
+                              max_y = max_y, min_y = min_y,
                               y_pred = y_pred, y = y, tree_mu = tree_mu),
                          class = "BART")
 
