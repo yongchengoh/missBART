@@ -4,7 +4,7 @@
 \alias{sim_data_friedman}
 \title{Simulate}
 \usage{
-sim_data_friedman(n, p = 1, scale_par = 1, omega_diag = 500)
+sim_data_friedman(n, p = 1, scale_par = 1, omega_diag = 1, Omega = NULL)
 }
 \arguments{
 \item{n}{number of observations}
@@ -13,15 +13,26 @@ sim_data_friedman(n, p = 1, scale_par = 1, omega_diag = 500)
 
 \item{scale_par}{scale_par}
 
-\item{omega_diag}{precision ~ rWishart(1, p+1, diag(omega_diag, p))}
+\item{omega_diag}{precision ~ rWishart(1, p + 1, diag(omega_diag, p))}
+}
+\value{
+A list with the following components
+\describe{
+\item{y}{responses}
+\item{x}{covariates}
+\item{ome}{precision matrix}
+\item{mean}{mean vector}
+\item{p}{number of responses}
+\item{q}{number of covariates (always 5)}
+}
 }
 \description{
 Simulate
 }
 \examples{
-data = sim_data_friedman(n = 1000, p = 3)
-true_trees_data = data$true_trees
-y = y_original = data$y
-x = data$x
-ome = data$ome
+data <- sim_data_friedman(n = 1000, p = 3)
+true_trees_data <- data$true_trees
+y <- y_original <- data$y
+x <- data$x
+ome <- data$ome
 }

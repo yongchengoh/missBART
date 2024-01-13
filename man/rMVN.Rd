@@ -18,5 +18,5 @@ One sample from a MVN(mu, Q^{-1}) distribution
 Sampling once from a MVN(mu, Q^{-1}) distribution (Keefe)
 }
 \examples{
-rMVN(c(0,0), diag(1,2))
+rMVN(c(0,0), diag(2))
 }

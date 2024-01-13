@@ -4,7 +4,7 @@
 \alias{hypers_list}
 \title{BART prior parameters}
 \usage{
-hypers_list(mu0 = 0, kappa = 1, alpha = 1, V = 1)
+hypers_list(mu0 = 0, kappa = NULL, alpha = NULL, V = NULL, df = 10, q = 0.75)
 }
 \arguments{
 \item{mu0}{hyperparameter}

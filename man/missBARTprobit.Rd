@@ -7,19 +7,24 @@
 missBARTprobit(
   x,
   y,
-  x_predict = NA,
-  n_trees = 20,
-  burn = 100,
-  iters = 100,
+  x_predict = c(),
+  n_trees = 100,
+  burn = 1000,
+  iters = 1000,
   thin = 2,
   predict = TRUE,
-  tree_prior_params = tree_list(),
-  hypers = hypers_list(),
+  tree_prior_params = tree_list(...),
+  hypers = hypers_list(...),
   scale = TRUE,
   include_x = TRUE,
   include_y = TRUE,
   show_progress = TRUE,
   progress_every = 10,
+  pdp_range = c(-0.5, 0.5),
+  make_pdp = FALSE,
+  mice_impute = TRUE,
+  true_trees_data = NA,
+  true_change_points = NA,
   ...
 )
 }
@@ -65,5 +70,6 @@ BART and probit regression for data with non-ignorable missingness in the respon
 \examples{
 x <- matrix(runif(6), ncol = 2)
 y <- matrix(runif(6), ncol = 2) \%*\% matrix(rnorm(4), ncol=2)
-missBARTprobit(x, y, n_trees = 2, burn = 2, iters = 2, thin = 1, scale = FALSE)
+bart_out <- missBARTprobit(x, y, n_trees = 2, burn = 2,
+                           iters = 2, thin = 1, scale = FALSE)
 }

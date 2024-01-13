@@ -4,7 +4,7 @@
 \alias{tree_list}
 \title{Tree prior parameters}
 \usage{
-tree_list(prior_alpha = 0.95, prior_beta = 2, min_node = 5, max_attempt = 100)
+tree_list(prior_alpha = 0.95, prior_beta = 2, min_node = 1, max_attempt = 1)
 }
 \arguments{
 \item{prior_alpha}{hyperparameter}
@@ -22,5 +22,5 @@ list of hyperparameters
 Tree prior parameters
 }
 \examples{
-tree_list(prior_alpha = 0.8, prior_beta = 3)
+tree_list(prior_alpha = 0.95, prior_beta = 3)
 }

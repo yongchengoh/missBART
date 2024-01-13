@@ -3,10 +3,10 @@ Type: Package
 Title: A multivariate extension of BART for modelling non-linear data with non-ignorable missingness in the response variable
 Version: 0.1.0
 Authors@R: c(person("Yong Chen", "Goh", email="yong.goh.2022@mumail.ie", role=c("aut", "cre")),
-  person("Keefe", "Murphy", email="keefe.murphy@mu.ie", role=c("aut")),
-  person("Andrew", "Parnell", email="andrew.parnell@mu.ie", role=c("aut")))
-Description: Bayesian Additive Regression Trees (BART) is a non-parametric sum-of-trees model. There are three types of missing data mechanisms: Missing Completely at Random (MCAR), Missing at Random (MAR), and Missing Not at Random (MNAR). When data are MNAR, the missingness probability depends on the missing data itself. This missing data mechanism is non-ignorable, so the data and the binary missing data indicators must be jointly modelled. We decompose the joint likelihood via a selection model, which is also capable of recovering MCAR & MAR mechanisms, and present a method for jointly modelling multivariate data with missingness in the response. The data and missing data indicators follow multivariate BART and probit regression models, respectively. Inference is conducted via a Gibbs sampling scheme in R, whereby the missing data is simultaneously imputed via sampling from its posterior density.
-License: GPL (>=2)
+  person("Keefe", "Murphy", email="keefe.murphy@mu.ie", role=c("aut"), comment = c(ORCID = "0000-0002-7709-3159")),
+  person("Andrew", "Parnell", email="andrew.parnell@mu.ie", role=c("aut"), comment = c(ORCID = "0000-0001-7956-7939")))
+Description: Bayesian Additive Regression Trees (BART) is a non-parametric sum-of-trees model. There are three types of missing data mechanisms: Missing Completely at Random (MCAR), Missing at Random (MAR), and Missing Not at Random (MNAR). When data are MNAR, the missingness probability depends on the missing data itself. This missing data mechanism is non-ignorable, so the data and the binary missing data indicators must be jointly modelled. We decompose the joint likelihood via a selection model, which is also capable of recovering MCAR & MAR mechanisms, and present a method for jointly modelling multivariate data with missingness in the response. The data and missing data indicators follow multivariate BART and probit regression (or probit BART) models, respectively. Inference is conducted via a Gibbs sampling scheme in R, whereby the missing data is simultaneously imputed via sampling from its posterior density.
+License: GPL (>= 3)
 Encoding: UTF-8
 LazyData: true
 BugReports: https://github.com/yongchengoh/missBART

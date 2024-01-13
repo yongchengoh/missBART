@@ -30,88 +30,90 @@ To demonstrate the use of the different functions in the package, we will simula
 ```{r}
 set.seed(123456789)
 
-n = 50
-p = 2 #no. of dependent variables
-q = 2 #no. of independent variables
+n <- 50
+p <- 2 #no. of dependent variables
+q <- 2 #no. of independent variables
 
-x = matrix(runif(n*q, min = 0, max = 1), ncol = q)
+x <- matrix(runif(n * q, min = 0, max = 1), ncol = q)
 
-sum_mu = matrix(0, ncol = p, nrow = n)
-trees = 5
-ome = matrix(c(1.7, 0.377, 0.377, 0.62), ncol=2)
-kappa = 16*trees
-true_trees = vector(mode = "list", length = trees)
-for(i in 1:trees){
+sum_mu <- matrix(0, ncol = p, nrow = n)
+trees <- 5
+ome <- matrix(c(1.7, 0.377, 0.377, 0.62), ncol=2)
+kappa <- 16 * trees
+true_trees <- vector(mode = "list", length = trees)
+for(i in seq_len(trees)) {
   df1 <- data.frame(matrix(ncol = 7, nrow = 1))
-  colnames(df1) = c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
+  colnames(df1) <- c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
   df1[1,] <- c(0,0,1,0,1,0,0)
-  n_splits = sample(seq(1,8), 1)
-  mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p)) 
+  n_splits <- sample(seq_len(8), 1)
+  mu <- multi_rMVN(matrix(0, ncol=p, nrow = n_splits + 1), diag(kappa, p)) 
 
-  for(j in 1:n_splits){
-    new_tree = propose_tree(df1, x, 20, 10, 2)
-    df1 = new_tree$new_df
+  for(j in seq_len(n_splits)) {
+    new_tree <- propose_tree(df1, x, 20, 10, 2)
+    df1 <- new_tree$new_df
   }
 
-  true_trees[[i]] = df1
-  sum_mu = sum_mu + mu[new_tree$change_points,,drop=FALSE]
+  true_trees[[i]] <- df1
+  sum_mu <- sum_mu + mu[new_tree$change_points,, drop=FALSE]
 }
 
-y = multi_rMVN(mean_mat = sum_mu, precision = ome)
-y_original = y
+y <- multi_rMVN(mean_mat = sum_mu, precision = ome)
+y_original <- y
 
 plot(y_original[,1], y_original[,2])
 ```
 
 ### Simulate missing values 
 ```{r}
-include_x = FALSE
-include_y = TRUE
-r = 1
-if(include_x & !include_y){
-  r = 1 + q
-} else if (!include_x & include_y){
-  r = 1 + p
-} else if (include_x & include_y){
-  r = 1 + p + q
+include_x <- FALSE
+include_y <- TRUE
+r <- 1
+if(include_x && !include_y) {
+  r <- 1 + q
+} else if (!include_x && include_y) {
+  r <- 1 + p
+} else if (include_x && include_y) {
+  r <- 1 + p + q
 }
-corR = diag(1,p)
+corR <- diag(p)
 
-for(seed in sample(seq(1000,100000), size = 10000)){
+for(seed in sample(seq(1000, 100000), size = 10000)) {
   set.seed(seed)
-  Psi_1 = matrix(rnorm(r*r), ncol=r) + diag(5, r) #rInvWishart(1, r+1, diag(1,r))[,,1]
-  B = matrnorm(matrix(0, nrow=r, ncol=p), Psi_1, corR)
-  if(include_x & !include_y){
-    phi = cbind(rep(1, n), x) %*% B
-  } else if (!include_x & include_y){
-    phi = cbind(rep(1,n), y) %*% B
-  } else if (include_x & include_y){
-    phi = cbind(rep(1,n), x, y) %*% B
+  Psi_1 <- matrix(rnorm(r * r), ncol=r) + diag(5, r) #rInvWishart(1, r + 1, diag(r))[,,1]
+  B <- matrnorm(matrix(0, nrow=r, ncol=p), Psi_1, corR)
+  if(include_x && !include_y) {
+    phi <- cbind(1, x) %*% B
+  } else if (!include_x && include_y) {
+    phi <- cbind(1, y) %*% B
+  } else if (include_x && include_y) {
+    phi <- cbind(1, x, y) %*% B
   } else {
-    phi = matrix(B, nrow = n, ncol = p, byrow = TRUE)
+    phi <- matrix(B, nrow = n, ncol = p, byrow = TRUE)
   }
-  z_mod = multi_rMVN(phi, solve(corR))
-  m = matrix(1, nrow=n, ncol=p)
-  m[z_mod<=0] = 0
+  z_mod <- multi_rMVN(phi, solve(corR))
+  m <- matrix(1, nrow=n, ncol=p)
+  m[z_mod <= 0] <- 0
   
-  mis_prop = colSums(m)/n
+  mis_prop <- colMeans(m)
   if(all(mis_prop > 0.9) & all(mis_prop < 0.99)) break
 }
 
-y[m==0] = NA
+y[m == 0] <- NA
 
-missing_index = which(is.na(y))
-obs_index = which(!is.na(y))
+missing_index <- which(is.na(y))
+obs_index <- which(!is.na(y))
 
 ```
 
 Now that we have a dataset with MNAR missingness in the response, we can run `missBART.probit()`. 
 
 ```{r}
-missBART = missBARTprobit(x, y, burn = 100, iters = 100, thin = 1, n_trees = 10, include_x = FALSE, include_y = TRUE, scale = FALSE, show_progress = FALSE)
+missBART <- missBARTprobit(x, y, burn = 100, iters = 100, 
+                           thin = 1, n_trees = 10, include_x = FALSE,
+                           include_y = TRUE, scale = FALSE, show_progress = FALSE)
 
-y_pred = missBART$y_pred
-y_pred = Reduce("+", y_pred)/length(y_pred)
+y_pred <- missBART$y_pred
+y_pred <- Reduce("+", y_pred)/length(y_pred)
 
 plot(y_pred[,1], y_original[,1])
 plot(y_pred[,2], y_original[,2])

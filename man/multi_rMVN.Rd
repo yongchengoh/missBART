@@ -18,5 +18,5 @@ a matrix where each row corresponds to a draw from a MVN distribution with mean 
 Sampling multiple times from a multivariate normal distribution
 }
 \examples{
-multi_rMVN(matrix(0, ncol=2, nrow=10), diag(1,2))
+multi_rMVN(matrix(0, ncol=2, nrow=10), diag(2))
 }

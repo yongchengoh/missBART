@@ -6,11 +6,11 @@
 #' @return One sample from a MVN(mu, Q^{-1}) distribution
 #' @export
 #'
-#' @examples rMVN(c(0,0), diag(1,2))
+#' @examples rMVN(c(0,0), diag(2))
 rMVN <- function(mu, Q) {
   p  <- NCOL(Q)
   z  <- stats::rnorm(p)
-  if(p == 1) mu + z/sqrt(Q) else mu + backsolve(PD_chol(Q), z)
+  if(p == 1) mu + z/sqrt(Q) else mu + backsolve(PD_chol(Q), z, k=p)
 }
 
 #keefe: some versions below use this function to draw from MVN(bQ^{-1},Q^{-1}) a little faster than MVN(mu=bQ^{-1},Q^{-1})
@@ -24,7 +24,7 @@ rMVN <- function(mu, Q) {
 #' @return One sample from a MVN(bQ^{-1},Q^{-1}) distribution
 #' @export
 #'
-#' @examples rMVNc(c(0,0), diag(1,2))
+#' @examples rMVNc(c(0,0), diag(2))
 rMVNc   <- function(b, Q, is_chol = FALSE) {
   p     <- NCOL(Q)
   Z     <- if(is.matrix(drop(b))) matrix(stats::rnorm(p * ncol(b)), nrow=p) else stats::rnorm(p)
@@ -45,12 +45,12 @@ rMVNc   <- function(b, Q, is_chol = FALSE) {
 #' @return a matrix where each row corresponds to a draw from a MVN distribution with mean equal to the rows of \code{mean_mat} and precision \code{precision}
 #' @export
 #'
-#' @examples multi_rMVN(matrix(0, ncol=2, nrow=10), diag(1,2))
+#' @examples multi_rMVN(matrix(0, ncol=2, nrow=10), diag(2))
 multi_rMVN <- function(mean_mat, precision) {
   n <- nrow(mean_mat)
   p <- ncol(mean_mat)
   Y <- matrix(nrow = n, ncol = p)
-  for(i in 1:n) {
+  for(i in seq_len(n)) {
     Y[i,] <- rMVNmu0(precision)
   }
   return(Y + mean_mat)
@@ -64,7 +64,7 @@ multi_rMVN <- function(mean_mat, precision) {
 #' @return one sample from a MV(mu, U, V) distribution
 #' @export
 #'
-#' @examples matrnorm(matrix(0, nrow=5, ncol=2), diag(1,5), diag(1,2))
+#' @examples matrnorm(matrix(0, nrow=5, ncol=2), diag(5), diag(2))
 matrnorm <- function(mu, U, V) {
   r <- NCOL(U)
   p <- NCOL(V)
@@ -72,5 +72,3 @@ matrnorm <- function(mu, U, V) {
   X <- mu + crossprod(PD_chol(U), X) %*% (if(p == 1) sqrt(V) else PD_chol(V))
   return(X)
 }
-
-

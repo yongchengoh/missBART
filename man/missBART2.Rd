@@ -7,20 +7,29 @@
 missBART2(
   x,
   y,
-  x_predict = NA,
-  n_reg_trees = 20,
-  n_class_trees = 20,
-  burn = 100,
-  iters = 100,
+  x_predict = c(),
+  n_reg_trees = 100,
+  n_class_trees = 100,
+  burn = 1000,
+  iters = 1000,
   thin = 2,
   predict = TRUE,
-  tree_prior_params = tree_list(),
-  hypers = hypers_list(),
+  MH_sd = 0.5,
+  tree_prior_params = tree_list(...),
+  hypers = hypers_list(...),
   scale = TRUE,
   include_x = TRUE,
   include_y = TRUE,
   show_progress = TRUE,
   progress_every = 10,
+  pdp_range = c(-0.5, 0.5),
+  make_pdp = FALSE,
+  mice_impute = TRUE,
+  true_trees_data = NA,
+  true_trees_missing = NA,
+  z_true,
+  true_change_points = NA,
+  true_change_points_miss = NA,
   ...
 )
 }
@@ -59,6 +68,15 @@ missBART2(
 
 \item{...}{Catches unused arguments}
 }
+\value{
+a list containing BART predictions and imputed values
+}
 \description{
 Title
+}
+\examples{
+x <- matrix(runif(6), ncol = 2)
+y <- matrix(runif(6), ncol = 2) \%*\% matrix(rnorm(4), ncol=2)
+bart_out <- missBART2(x, y, n_trees = 2, burn = 2,
+                      iters = 2, thin = 1, scale = FALSE)
 }

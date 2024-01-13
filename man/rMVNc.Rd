@@ -20,5 +20,5 @@ One sample from a MVN(bQ^{-1},Q^{-1}) distribution
 Sampling from MVN(bQ^{-1},Q^{-1})
 }
 \examples{
-rMVNc(c(0,0), diag(1,2))
+rMVNc(c(0,0), diag(2))
 }

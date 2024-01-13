@@ -4,7 +4,18 @@
 \alias{sim_data_trees}
 \title{Simulating data from trees}
 \usage{
-sim_data_trees(n, p, q, min_x = 0, max_x = 1, trees = 1, ...)
+sim_data_trees(
+  n,
+  p,
+  q,
+  min_x = 0,
+  max_x = 1,
+  trees = 1,
+  ome = NULL,
+  kappa = NULL,
+  splits = NULL,
+  ...
+)
 }
 \arguments{
 \item{n}{number of observations}
@@ -21,13 +32,22 @@ sim_data_trees(n, p, q, min_x = 0, max_x = 1, trees = 1, ...)
 
 \item{...}{Catches unused arguments}
 }
+\value{
+A list with the following components
+\describe{
+\item{y}{responses}
+\item{x}{covariates}
+\item{ome}{precision matrix}
+\item{true_trees}{trees}
+}
+}
 \description{
 Simulating data from trees
 }
 \examples{
-data = sim_data_trees(n = 100, p = 3, q = 4, trees = 6)
-y = y_original = data$y
-x = data$x
-ome = data$ome
-true_trees_data = data$true_trees
+data <- sim_data_trees(n = 100, p = 3, q = 4, trees = 6)
+y <- y_original <- data$y
+x <- data$x
+ome <- data$ome
+true_trees_data <- data$true_trees
 }

@@ -8,7 +8,7 @@ propose_tree(
   df,
   x,
   min_node,
-  max_attempt = 50,
+  max_attempt = 10,
   i,
   probit = FALSE,
   miss_row = NA,
@@ -39,7 +39,7 @@ A dataframe containing details of a new tree structure
 A function for proposing an updated tree structure
 }
 \examples{
-# Create a dataframe representing the root node of a tree
+# Create a data.frame representing the root node of a tree
 df <- data.frame(matrix(ncol = 7, nrow = 1))
 colnames(df) <- c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
 df[1,] <- c(0,0,1,0,1,0,0)

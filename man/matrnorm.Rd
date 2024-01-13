@@ -20,5 +20,5 @@ one sample from a MV(mu, U, V) distribution
 Sampling from a matrix normal distribution MV(mu, U, V)
 }
 \examples{
-matrnorm(matrix(0, nrow=5, ncol=2), diag(1,5), diag(1,2))
+matrnorm(matrix(0, nrow=5, ncol=2), diag(5), diag(2))
 }

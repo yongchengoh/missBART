@@ -19,30 +19,30 @@ library(ggplot2)
 library(reshape2)
 
 #----- SIMULATE COMPLETE DATA
-n = 500
-p = 2
-data = sim_data_friedman(n = n, p = p, omega_diag = 5, scale_par = 5)
-# data = mlbench::mlbench.friedman1(n*p)
-# data = sim_data_trees(n = n, p = p, q = 2, trees = 2)
-# true_trees_data = data$true_trees
-y = y_original = matrix(data$y, ncol=p)
-x = x_original = data$x
+n <- 500
+p <- 2
+data <- sim_data_friedman(n = n, p = p, omega_diag = 5, scale_par = 5)
+# data <- mlbench::mlbench.friedman1(n * p)
+# data <- sim_data_trees(n = n, p = p, q = 2, trees = 2)
+# true_trees_data <- data$true_trees
+y <- y_original <- matrix(data$y, ncol=p)
+x <- x_original <- data$x
 
 #----- SIMULATE MISSINGNESS IN DATA
-missing = sim_missing_trees(x = x, y = y, include_x = FALSE, include_y = TRUE, max_missing_prop = 0.99, min_node = 5, min_missing_prop = 0.7, trees = 1)
-# missing = sim_missing(x = x, y = y, include_x = FALSE, include_y = TRUE, min_missing_prop = 0.7, max_missing_prop = 0.99)
+missing <- sim_missing_trees(x = x, y = y, include_x = FALSE, include_y = TRUE, max_missing_prop = 0.99, min_node = 5, min_missing_prop = 0.7, trees = 1)
+# missing = sim_missing_probit(x = x, y = y, include_x = FALSE, include_y = TRUE, min_missing_prop = 0.7, max_missing_prop = 0.99)
 paste("Proportion of data observed: ", missing$missing_prop*100, "%")
 paste("Proportion of data missing: ", (1-missing$missing_prop)*100, "%")
-y = missing$missing_y
-missing_index = missing$missing_index
-obs_index = missing$obs_index
-m = missing$m
-p_m = pnorm(missing$z)
+y <- missing$missing_y
+missing_index <- missing$missing_index
+obs_index <- missing$obs_index
+m <- missing$m
+p_m <- pnorm(missing$z)
 missing$true_trees
 
 #----- PLOT DATA
-for(j in 1:ncol(y)){
-  plot = ggplot(data.frame(x = x_original[,1], y = y_original[,j]), aes(x, y, color=factor(m[,j]))) + geom_point() + ggtitle(paste("In-sample y", j, sep=""))
+for(j in 1:ncol(y)) {
+  plot <- ggplot(data.frame(x = x_original[,1], y = y_original[,j]), aes(x, y, color=factor(m[,j]))) + geom_point() + ggtitle(paste("In-sample y", j, sep=""))
   print(plot)
 }
 
@@ -52,38 +52,42 @@ plot(y_original, m)
 ggplot(data.frame(factor(m), y_original), aes(x = factor(m), y = y_original, fill = factor(m))) + geom_boxplot() + theme_bw() + guides(colour=guide_legend(title="")) + theme(legend.position="right", plot.title = element_text(size = 30), axis.title.x = element_text(size = 20), axis.title.y = element_text(size = 20), legend.text = element_text(size = 22), legend.key.size = unit(1, 'cm')) + scale_fill_discrete(name = "", labels = c("Missing", "Observed")) + xlab("m") + ylab("Data Y1")
 
 #########
-total_n = nrow(y)
-train_n = round(total_n * 0.6)
-test_n = total_n - train_n
+total_n <- nrow(y)
+train_n <- round(total_n * 0.6)
+test_n <- total_n - train_n
 
-test_index = sample(seq_len(total_n), test_n)
-x_predict = x[test_index,]
-x = x[-test_index,]
+test_index <- sample(seq_len(total_n), test_n)
+x_predict <- x[test_index,]
+x <- x[-test_index,]
 
-n = train_n
-y_predict = y[test_index,,drop=FALSE]
-y = y[-test_index,,drop=FALSE]
+n <- train_n
+y_predict <- y[test_index,, drop=FALSE]
+y <- y[-test_index,, drop=FALSE]
 
-pdp_range1 = (min(y_original) - min(y,na.rm=TRUE))/(max(y,na.rm=TRUE) - min(y,na.rm=TRUE)) - 0.5
-pdp_range2 = (max(y_original) - min(y,na.rm=TRUE))/(max(y,na.rm=TRUE) - min(y,na.rm=TRUE)) - 0.5
+pdp_range1 <- (min(y_original) - min(y, na.rm=TRUE))/(max(y, na.rm=TRUE) - min(y, na.rm=TRUE)) - 0.5
+pdp_range2 <- (max(y_original) - min(y, na.rm=TRUE))/(max(y, na.rm=TRUE) - min(y, na.rm=TRUE)) - 0.5
 
-n_reg_trees = 100
-n_class_trees = 50
-burn = 100
-iters = 1000
-thin = 1
-MH_sd = 0.1
+n_reg_trees <- 100
+n_class_trees <- 50
+burn <- 100
+iters <- 1000
+thin <- 1
+MH_sd <- 0.1
 ```
 
 ```{r}
-model1 = missBARTprobit(x, y, predict = TRUE, n_trees = n_reg_trees, burn = burn, iters = iters, thin = thin, x_predict = x_predict, show_progress = TRUE, scale = TRUE, make_pdp = FALSE, pdp_range = c(pdp_range1, pdp_range2), include_x = FALSE, include_y = TRUE, mice_impute = TRUE)
+model1 <- missBARTprobit(x, y, predict = TRUE, n_trees = n_reg_trees, burn = burn, 
+                         iters = iters, thin = thin, x_predict = x_predict, 
+                         show_progress = TRUE, scale = TRUE, make_pdp = FALSE, 
+                         pdp_range = c(pdp_range1, pdp_range2), include_x = FALSE, 
+                         include_y = TRUE, mice_impute = TRUE)
 
-# pdp_B = Reduce("+", model1$B_post)/length(model1$B_post)
+# pdp_B <- Reduce("+", model1$B_post)/length(model1$B_post)
 # pdp_param_mat_list = pdp_param_mat_list(x, intercept = TRUE, y_range = c(pdp_range1, pdp_range2))
-# pdp_model1 = pnorm(Reduce(cbind, lapply(pdp_param_mat_list, function(x) x %*% pdp_B)))
+# pdp_model1 <- pnorm(Reduce(cbind, lapply(pdp_param_mat_list, function(x) x %*% pdp_B)))
 
-# pdp_model1 = Reduce("+", model1$pdp_out)/length(model1$pdp_out)
-pdp_model1 = pnorm(Reduce(cbind, lapply(model1$B_post, function(x) matrix(c(rep(1,20), seq(pdp_range1, pdp_range2, length = 20)), ncol = 2) %*% x)))
+# pdp_model1 <- Reduce("+", model1$pdp_out)/length(model1$pdp_out)
+pdp_model1 <- pnorm(Reduce(cbind, lapply(model1$B_post, function(x) matrix(c(rep(1, 20), seq(pdp_range1, pdp_range2, length = 20)), ncol = 2) %*% x)))
 
 # pdf("pdp_missBARTprobit.pdf", width = 8, height = 6)
 matplot(matrix(seq(min(y_original), max(y_original), length=20)), pdp_model1, type = "l", xlim = c(min(y_original), max(y_original)), ylim = c(0,1), xlab = "y", ylab = "p(m)")
@@ -94,25 +98,25 @@ points(y_original, p_m)
 ```
 
 ```{r}
-y_post = model1$y_post
+y_post <- model1$y_post
 
-mean_y_post = Reduce("+", y_post)/length(y_post)
-mean_y_post = unscale(mean_y_post, min = model1$min_y, max = model1$max_y)
+mean_y_post <- Reduce("+", y_post)/length(y_post)
+mean_y_post <- unscale(mean_y_post, min = model1$min_y, max = model1$max_y)
 
-mean_new_y_post = Reduce("+", model1$new_y_post)/length(model1$new_y_post)
-mean_new_y_post = unscale(mean_new_y_post, min = model1$min_y, max = model1$max_y)
+mean_new_y_post <- Reduce("+", model1$new_y_post)/length(model1$new_y_post)
+mean_new_y_post <- unscale(mean_new_y_post, min = model1$min_y, max = model1$max_y)
 
-BART_probit_plot = vector(mode = "list", length = p)
-BART_probit_facet = vector(mode = "list", length = p)
-cheat = vector("list", length = p)
-colours = c("#FD7446FF", "#709AE1FF", "#1A9993FF", "#FD8CC1FF", "#FED439FF")
-for(j in 1:p){
-  min = min(y_original[,j], mean_y_post[,j]) 
-  max = max(y_original[,j], mean_y_post[,j]) 
-  cheat[[j]] = data.frame(y_seq = seq(min, max, length=n))
+BART_probit_plot <- vector(mode = "list", length = p)
+BART_probit_facet <- vector(mode = "list", length = p)
+cheat <- vector("list", length = p)
+colours <- c("#FD7446FF", "#709AE1FF", "#1A9993FF", "#FD8CC1FF", "#FED439FF")
+for(j in seq_len(p)) {
+  min <- min(y_original[,j], mean_y_post[,j]) 
+  max <- max(y_original[,j], mean_y_post[,j]) 
+  cheat[[j]] <- data.frame(y_seq = seq(min, max, length=n))
 
-  plot_data = data.frame(y_original = y_original[-test_index,j], y_post = mean_y_post[,j], Observed = factor(m[-test_index,j]))
-  plot = ggplot(plot_data, aes(y_original, y_post)) + 
+  plot_data <- data.frame(y_original = y_original[-test_index,j], y_post = mean_y_post[,j], Observed = factor(m[-test_index,j]))
+  plot <- ggplot(plot_data, aes(y_original, y_post)) + 
     geom_point(aes(color=Observed, shape = Observed), alpha = 1, size = 0.5) + 
     scale_shape_manual(name = "", labels = c("Missing", "Observed"),values=c(17, 19)) +
     scale_colour_manual(name = "", labels = c("Missing", "Observed"), values = c(colours[1], colours[3])) +
@@ -122,17 +126,17 @@ for(j in 1:p){
     geom_line(data=cheat[[j]], aes(y_seq, y_seq), colour="black", size=0.5) +
     theme_bw() + guides(colour=guide_legend(title="")) + theme(legend.position="right", plot.title = element_text(size = 10), axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10), legend.text = element_text(size = 10), legend.key.size = unit(1, 'cm'))
 
-  BART_probit_plot[[j]] = plot
+  BART_probit_plot[[j]] <- plot
   print(plot)
 
-  facet_labels = c("Missing", "Observed")
-  names(facet_labels) = c('0', '1')
-  facet_plot = plot + facet_grid(as.factor(m[-test_index,j]), labeller = as_labeller(facet_labels)) #vars(test$m)
-  BART_probit_facet[[j]] = facet_plot
+  facet_labels <- c("Missing", "Observed")
+  names(facet_labels) <- c('0', '1')
+  facet_plot <- plot + facet_grid(as.factor(m[-test_index,j]), labeller = as_labeller(facet_labels)) #vars(test$m)
+  BART_probit_facet[[j]] <- facet_plot
   print(facet_plot)
   
   # Plot out-of-sample observations
-  plot_new = ggplot(data = data.frame(y_original = y_original[test_index,j], y_post = mean_new_y_post[,j]), aes(y_original, y_post)) +
+  plot_new <- ggplot(data = data.frame(y_original = y_original[test_index,j], y_post = mean_new_y_post[,j]), aes(y_original, y_post)) +
     geom_point(colour = colours[3], size=2, alpha = 1) +
     theme_bw() +
     ylab(paste("Predicted Y",j,sep="")) +
@@ -144,23 +148,23 @@ for(j in 1:p){
 
 }
 
-sqrt(mean((plot_data$y_original[plot_data$Observed==1] - plot_data$y_post[plot_data$Observed==1])^2))
-sqrt(mean((plot_data$y_original[plot_data$Observed==0] - plot_data$y_post[plot_data$Observed==0])^2))
+sqrt(mean((plot_data$y_original[plot_data$Observed == 1] - plot_data$y_post[plot_data$Observed == 1])^2))
+sqrt(mean((plot_data$y_original[plot_data$Observed == 0] - plot_data$y_post[plot_data$Observed == 0])^2))
 
-rmse = sqrt(colSums((y_original[-test_index,,drop=FALSE] - mean_y_post)^2)/n)
+rmse <- sqrt(colSums((y_original[-test_index,, drop=FALSE] - mean_y_post)^2)/n)
 cat("RMSE (In-sample) = ", rmse, "\n")
 
-rmse2 = sqrt(colSums((y_original[test_index,,drop=FALSE] - mean_new_y_post)^2)/test_n)
+rmse2 <- sqrt(colSums((y_original[test_index,, drop=FALSE] - mean_new_y_post)^2)/test_n)
 cat("RMSE (Out-of-sample) = ", rmse2, "\n")
 
 
 # Plot trace plots for Omega
-scaled_ome = data$ome * (apply(y_original, 2, max) - apply(y_original, 2, min))^2
-for(j in (seq_len(p)*(p+1)-p)){
+scaled_ome <- data$ome * (apply(y_original, 2, max) - apply(y_original, 2, min))^2
+for(j in (seq_len(p) * (p + 1) - p)) {
  
   print(ggplot(data = data.frame("iters"=seq(1, length(model1$omega_post)), "value"=sapply(model1$omega_post,"[[",j)), aes(iters,value)) + geom_path(color=colours[1]) + geom_abline(intercept = scaled_ome[j], slope = 0) + ylim(min(range(sapply(model1$omega_post,"[[",j)), scaled_ome[j]), max(range(sapply(model1$omega_post,"[[",j)), scaled_ome[j])))
   
-  omega_trace = coda::mcmc(sapply(model1$omega_post,"[[",j))
+  omega_trace <- coda::mcmc(sapply(model1$omega_post, "[[", j))
   coda::autocorr.plot(omega_trace)
 }
 
@@ -169,43 +173,48 @@ for(j in (seq_len(p)*(p+1)-p)){
 ```
 
 ```{r}
-z_post = model1$z_post
-p_model_missBARTprobit = Reduce("+", lapply(z_post, function(x) pnorm(x)))/length(z_post)
+z_post <- model1$z_post
+p_model_missBARTprobit <- Reduce("+", lapply(z_post, function(x) pnorm(x)))/length(z_post)
 
-# test = Reduce(cbind, lapply(z_post, function(x) pnorm(x)))
-# matplot(seq(1,400), test[, 200:500], type = "l")
+# test <- Reduce(cbind, lapply(z_post, function(x) pnorm(x)))
+# matplot(seq(1, 400), test[, 200:500], type = "l")
 
 ```
 
 ```{r}
-# predict = TRUE
-# show_progress = TRUE
-# progress_every = 10
-# pdp_range = c(pdp_range1, pdp_range2)
-# make_pdp = TRUE
-# include_x = FALSE
-# include_y = TRUE
-# tree_prior_params = tree_list()
-# hypers = hypers_list()
-# scale = TRUE
+# predict <- TRUE
+# show_progress <- TRUE
+# progress_every <- 10
+# pdp_range <- c(pdp_range1, pdp_range2)
+# make_pdp <- TRUE
+# include_x <- FALSE
+# include_y <- TRUE
+# tree_prior_params <- tree_list()
+# hypers <- hypers_list()
+# scale <- TRUE
 ```
 
 
 ```{r}
-# n_reg_trees = 90
-# n_class_trees = 50
-# burn = 1000
-# iters = 2000
-# thin = 1
+# n_reg_trees <- 90
+# n_class_trees <- 50
+# burn <- 1000
+# iters <- 2000
+# thin <- 1
 
-model2 = missBART2(x, y, predict = TRUE, n_reg_trees = n_reg_trees, n_class_trees = n_class_trees, burn = burn, iters = iters, thin = thin, x_predict = x_predict, show_progress = TRUE, progress_every = 10, pdp_range = c(pdp_range1, pdp_range2), make_pdp = TRUE, include_x = FALSE, include_y = TRUE, MH_sd = MH_sd, mice_impute = TRUE)
+model2 <- missBART2(x, y, predict = TRUE, n_reg_trees = n_reg_trees, 
+                    n_class_trees = n_class_trees, burn = burn, iters = iters, 
+                    thin = thin, x_predict = x_predict, show_progress = TRUE, 
+                    progress_every = 10, pdp_range = c(pdp_range1, pdp_range2), 
+                    make_pdp = TRUE, include_x = FALSE, include_y = TRUE, 
+                    MH_sd = MH_sd, mice_impute = TRUE)
 
 #----------------------------------- PDP -----------------------------------#
 
-# pdp = Reduce("+", model2$pdp_out)/length(model2$pdp_out)
+# pdp <- Reduce("+", model2$pdp_out)/length(model2$pdp_out)
 # pdf("pdp_missBART2.pdf", width = 8, height = 6)
-pdp = Reduce(rbind, model2$pdp_out)
-pdp_length = ncol(pdp)
+pdp <- Reduce(rbind, model2$pdp_out)
+pdp_length <- ncol(pdp)
 matplot(matrix(seq(min(y_original), max(y_original), length=pdp_length)), t(pnorm(pdp)), type = "l", xlab = "Y", ylab = "p(m)", xlim = c(min(y_original), max(y_original)), ylim = c(0,1))
 lines(matrix(seq(min(y_original), max(y_original), length=pdp_length)), rowMeans(t(pnorm(pdp))), lwd=10, col="#FFF40F95")
 lines(matrix(seq(min(y_original), max(y_original), length=pdp_length)), rowMeans(t(pnorm(pdp))), lwd=2, col="black")
@@ -217,26 +226,26 @@ points(y_original, p_m)
 
 ```{r}
 #----------------------------------- Plotting -----------------------------------#
-y_post = model2$y_post
+y_post <- model2$y_post
 
-mean_y_post = Reduce("+", y_post)/length(y_post)
-mean_y_post = unscale(mean_y_post, min = model2$min_y, max = model2$max_y)
+mean_y_post <- Reduce("+", y_post)/length(y_post)
+mean_y_post <- unscale(mean_y_post, min = model2$min_y, max = model2$max_y)
 
-mean_new_y_post = Reduce("+", model2$new_y_post)/length(model2$new_y_post)
-mean_new_y_post = unscale(mean_new_y_post, min = model2$min_y, max = model2$max_y)
+mean_new_y_post <- Reduce("+", model2$new_y_post)/length(model2$new_y_post)
+mean_new_y_post <- unscale(mean_new_y_post, min = model2$min_y, max = model2$max_y)
 
-BART_probit_plot = vector(mode = "list", length = p)
-BART_probit_facet = vector(mode = "list", length = p)
-cheat = vector("list", length = p)
-colours = c("#FD7446FF", "#709AE1FF", "#1A9993FF", "#FD8CC1FF", "#FED439FF")
+BART_probit_plot <- vector(mode = "list", length = p)
+BART_probit_facet <- vector(mode = "list", length = p)
+cheat <- vector("list", length = p)
+colours <- c("#FD7446FF", "#709AE1FF", "#1A9993FF", "#FD8CC1FF", "#FED439FF")
 
-for(j in 1:p){
-  min = min(y_original[,j], mean_y_post[,j]) 
-  max = max(y_original[,j], mean_y_post[,j]) 
-  cheat[[j]] = data.frame(y_seq = seq(min, max, length=n))
+for(j in seq_len(p)) {
+  min <- min(y_original[,j], mean_y_post[,j]) 
+  max <- max(y_original[,j], mean_y_post[,j]) 
+  cheat[[j]] <- data.frame(y_seq = seq(min, max, length=n))
 
-  plot_data = data.frame(y_original = y_original[-test_index,j], y_post = mean_y_post[,j], Observed = factor(m[-test_index,j]))
-  plot = ggplot(plot_data, aes(y_original, y_post)) + 
+  plot_data <- data.frame(y_original = y_original[-test_index,j], y_post = mean_y_post[,j], Observed = factor(m[-test_index,j]))
+  plot <- ggplot(plot_data, aes(y_original, y_post)) + 
     geom_point(aes(color=Observed, shape = Observed), alpha = 1, size = 0.5) + 
     scale_shape_manual(name = "", labels = c("Missing", "Observed"),values=c(17, 19)) +
     scale_colour_manual(name = "", labels = c("Missing", "Observed"), values = c(colours[1], colours[3])) +
@@ -246,17 +255,17 @@ for(j in 1:p){
     geom_line(data=cheat[[j]], aes(y_seq, y_seq), colour="black", size=0.5) +
     theme_bw() + guides(colour=guide_legend(title="")) + theme(legend.position="right", plot.title = element_text(size = 10), axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10), legend.text = element_text(size = 10), legend.key.size = unit(1, 'cm'))
 
-  BART_probit_plot[[j]] = plot
+  BART_probit_plot[[j]] <- plot
   print(plot)
 
-  facet_labels = c("Missing", "Observed")
-  names(facet_labels) = c('0', '1')
-  facet_plot = plot + facet_grid(as.factor(m[-test_index,j]), labeller = as_labeller(facet_labels)) #vars(test$m)
-  BART_probit_facet[[j]] = facet_plot
+  facet_labels <- c("Missing", "Observed")
+  names(facet_labels) <- c('0', '1')
+  facet_plot <- plot + facet_grid(as.factor(m[-test_index,j]), labeller = as_labeller(facet_labels)) #vars(test$m)
+  BART_probit_facet[[j]] <- facet_plot
   print(facet_plot)
   
   # Plot out-of-sample observations
-  plot_new = ggplot(data = data.frame(y_original = y_original[test_index,j], y_post = mean_new_y_post[,j]), aes(y_original, y_post)) +
+  plot_new <- ggplot(data = data.frame(y_original = y_original[test_index,j], y_post = mean_new_y_post[,j]), aes(y_original, y_post)) +
     geom_point(colour = colours[3], size=2, alpha = 1) +
     theme_bw() +
     ylab(paste("Predicted Y",j,sep="")) +
@@ -268,23 +277,23 @@ for(j in 1:p){
 
 }
 
-sqrt(mean((plot_data$y_original[plot_data$Observed==1] - plot_data$y_post[plot_data$Observed==1])^2))
-sqrt(mean((plot_data$y_original[plot_data$Observed==0] - plot_data$y_post[plot_data$Observed==0])^2))
+sqrt(mean((plot_data$y_original[plot_data$Observed == 1] - plot_data$y_post[plot_data$Observed == 1])^2))
+sqrt(mean((plot_data$y_original[plot_data$Observed == 0] - plot_data$y_post[plot_data$Observed == 0])^2))
 
-rmse = sqrt(colSums((y_original[-test_index,,drop=FALSE] - mean_y_post)^2)/n)
+rmse <- sqrt(colSums((y_original[-test_index,, drop=FALSE] - mean_y_post)^2)/n)
 cat("RMSE (In-sample) = ", rmse, "\n")
 
-rmse2 = sqrt(colSums((y_original[test_index,,drop=FALSE] - mean_new_y_post)^2)/test_n)
+rmse2 <- sqrt(colSums((y_original[test_index,, drop=FALSE] - mean_new_y_post)^2)/test_n)
 cat("RMSE (Out-of-sample) = ", rmse2, "\n")
 
 
 # Plot trace plots for Omega
-scaled_ome = data$ome * (apply(y_original, 2, max) - apply(y_original, 2, min))^2
-for(j in (seq_len(p) * (p+1) - p)){
+scaled_ome <- data$ome * (apply(y_original, 2, max) - apply(y_original, 2, min))^2
+for(j in (seq_len(p) * (p + 1) - p)) {
  
   print(ggplot(data = data.frame("iters"=seq(1, length(model2$omega_post)), "value"=sapply(model2$omega_post,"[[",j)), aes(iters,value)) + geom_path(color=colours[1]) + geom_abline(intercept = scaled_ome[j], slope = 0) + ylim(min(range(sapply(model2$omega_post,"[[",j)), scaled_ome[j]), max(range(sapply(model2$omega_post,"[[",j)), scaled_ome[j])))
   
-  omega_trace = coda::mcmc(sapply(model2$omega_post,"[[",j))
+  omega_trace <- coda::mcmc(sapply(model2$omega_post,"[[",j))
   coda::autocorr.plot(omega_trace)
 }
 
@@ -295,49 +304,48 @@ data$ome
 
 
 ```{r}
-z_post2 = model2$z_post
+z_post2 <- model2$z_post
 p_model_missBART2 = Reduce("+", lapply(z_post2, function(x) pnorm(x)))/length(z_post2)
 
-plot(y_original[-test_index,,drop=FALSE], p_m[-test_index,,drop=FALSE], xlab = "y_train", ylab = "p(m)")
-points(y_original[-test_index,,drop=FALSE], p_model_missBARTprobit, col = "darkturquoise", pch = 15, cex = 0.5)
-points(y_original[-test_index,,drop=FALSE], p_model_missBART2, col = "deeppink", pch = 17, cex = 0.5)
+plot(y_original[-test_index,, drop=FALSE], p_m[-test_index,, drop=FALSE], xlab = "y_train", ylab = "p(m)")
+points(y_original[-test_index,, drop=FALSE], p_model_missBARTprobit, col = "darkturquoise", pch = 15, cex = 0.5)
+points(y_original[-test_index,, drop=FALSE], p_model_missBART2, col = "deeppink", pch = 17, cex = 0.5)
 ```
 
 ### mvBART on complete cases
 ```{r}
-y_cc = y[complete.cases(y),,drop=FALSE]
-x_cc = x[complete.cases(y),]
+y_cc <- y[complete.cases(y),, drop=FALSE]
+x_cc <- x[complete.cases(y),]
 
-model3 = mvBART(x = x_cc, y = y_cc, x_predict = rbind(x_predict, x[!complete.cases(y),,drop=FALSE]), n_trees = 100, predict = TRUE, scale = TRUE, burn = 1000, iters = 1000, thin = 2)
+model3 <- mvBART(x = x_cc, y = y_cc, x_predict = rbind(x_predict, x[!complete.cases(y),, drop=FALSE]), n_trees = 100, predict = TRUE, scale = TRUE, burn = 1000, iters = 1000, thin = 2)
 ```
 
 ```{r}
 #----------------------------------- Plotting -----------------------------------#
-y_post = model3$y_post
+y_post <- model3$y_post
 
-mean_y_post = Reduce("+", y_post)/length(y_post)
-mean_y_post = unscale(mean_y_post, min = model3$min_y, max = model3$max_y)
+mean_y_post <- Reduce("+", y_post)/length(y_post)
+mean_y_post <- unscale(mean_y_post, min = model3$min_y, max = model3$max_y)
 
-mean_new_y_post = Reduce("+", model3$new_y_post)/length(model3$new_y_post)
-mean_new_y_post = unscale(mean_new_y_post, min = model3$min_y, max = model3$max_y)
+mean_new_y_post <- Reduce("+", model3$new_y_post)/length(model3$new_y_post)
+mean_new_y_post <- unscale(mean_new_y_post, min = model3$min_y, max = model3$max_y)
+
+y_train_original <- y_original[-test_index,]
+y_train_miss <- y_train_original[!complete.cases(y)]
 
 
-y_train_original = y_original[-test_index,]
-y_train_miss = y_train_original[!complete.cases(y)]
+BART_probit_plot <- vector(mode = "list", length = p)
+BART_probit_facet <- vector(mode = "list", length = p)
+cheat <- vector("list", length = p)
+colours <- c("#FD7446FF", "#709AE1FF", "#1A9993FF", "#FD8CC1FF", "#FED439FF")
+for(j in seq_len(p)) {
+  min <- min(y_original[,j], mean_y_post[,j]) 
+  max <- max(y_original[,j], mean_y_post[,j]) 
+  cheat[[j]] <- data.frame(y_seq = seq(min, max, length=n))
 
-
-BART_probit_plot = vector(mode = "list", length = p)
-BART_probit_facet = vector(mode = "list", length = p)
-cheat = vector("list", length = p)
-colours = c("#FD7446FF", "#709AE1FF", "#1A9993FF", "#FD8CC1FF", "#FED439FF")
-for(j in 1:p){
-  min = min(y_original[,j], mean_y_post[,j]) 
-  max = max(y_original[,j], mean_y_post[,j]) 
-  cheat[[j]] = data.frame(y_seq = seq(min, max, length=n))
-
-  plot_data = data.frame(y_original = c(y_cc[,j], y_train_miss), y_post = c(mean_y_post[,j], mean_new_y_post[(nrow(x_predict)+1):nrow(mean_new_y_post), j]), Observed = as.factor(c(rep(1, nrow(y_cc)), rep(0, length(y_train_miss)))))
+  plot_data = data.frame(y_original = c(y_cc[,j], y_train_miss), y_post = c(mean_y_post[,j], mean_new_y_post[(nrow(x_predict) + 1):nrow(mean_new_y_post), j]), Observed = as.factor(c(rep(1, nrow(y_cc)), rep(0, length(y_train_miss)))))
   
-  plot = ggplot(plot_data, aes(y_original, y_post)) + 
+  plot <- ggplot(plot_data, aes(y_original, y_post)) + 
     geom_point(aes(color=Observed, shape = Observed), alpha = 1, size = 2) + 
     scale_shape_manual(name = "", labels = c("Missing", "Observed"),values=c(17, 19)) +
     scale_colour_manual(name = "", labels = c("Missing", "Observed"), values = c(colours[1], colours[3])) +
@@ -349,7 +357,7 @@ for(j in 1:p){
     geom_line(data=cheat[[j]], aes(y_seq, y_seq), colour="black", size=0.5) +
     theme_bw() + guides(colour=guide_legend(title="")) + theme(legend.position="right", plot.title = element_text(size = 30), axis.title.x = element_text(size = 20), axis.title.y = element_text(size = 20), legend.text = element_text(size = 22), legend.key.size = unit(2, 'cm')) + xlim(-0.6, 30) + ylim(-0.6, 30)
   
-  # plot = ggplot(plot_data, aes(y_original, y_post)) +
+  # plot <- ggplot(plot_data, aes(y_original, y_post)) +
   #   geom_point(alpha = 1, size = 2, colour = colours[3]) +
   #   theme_bw() +
   #   ylab(paste("Predicted Y",j,sep="")) +
@@ -357,17 +365,17 @@ for(j in 1:p){
   #   geom_line(data=cheat[[j]], aes(y_seq, y_seq), colour="black", size=0.5) +
   #   ggtitle("mvBART - Training Set") + guides(colour=guide_legend(title="")) + theme(legend.position="right", plot.title = element_text(size = 30), axis.title.x = element_text(size = 20), axis.title.y = element_text(size = 20), legend.text = element_text(size = 22), legend.key.size = unit(2, 'cm')) + xlim(0, 30) + ylim(0, 30)
 
-  BART_probit_plot[[j]] = plot
+  BART_probit_plot[[j]] <- plot
   print(plot)
 
-  # facet_labels = c("Missing", "Observed")
-  # names(facet_labels) = c('0', '1')
-  # facet_plot = plot + facet_grid(as.factor(m[-test_index,j]), labeller = as_labeller(facet_labels)) #vars(test$m)
-  # BART_probit_facet[[j]] = facet_plot
+  # facet_labels <- c("Missing", "Observed")
+  # names(facet_labels) <- c('0', '1')
+  # facet_plot <- plot + facet_grid(as.factor(m[-test_index,j]), labeller = as_labeller(facet_labels)) #vars(test$m)
+  # BART_probit_facet[[j]] <- facet_plot
   # print(facet_plot)
   
   # Plot out-of-sample observations
-  plot_new = ggplot(data = data.frame(y_original = y_original[test_index,j], y_post = mean_new_y_post[1:nrow(x_predict),j]), aes(y_original, y_post)) +
+  plot_new <- ggplot(data = data.frame(y_original = y_original[test_index,j], y_post = mean_new_y_post[1:nrow(x_predict),j]), aes(y_original, y_post)) +
     geom_point(colour = colours[3], size=2, alpha = 1) +
     theme_bw() +
     ylab(paste("Predicted Y",j,sep="")) +
@@ -378,57 +386,57 @@ for(j in 1:p){
 
 }
 
-sqrt(mean((plot_data$y_original[plot_data$Observed==1] - plot_data$y_post[plot_data$Observed==1])^2))
-sqrt(mean((plot_data$y_original[plot_data$Observed==0] - plot_data$y_post[plot_data$Observed==0])^2))
+sqrt(mean((plot_data$y_original[plot_data$Observed == 1] - plot_data$y_post[plot_data$Observed == 1])^2))
+sqrt(mean((plot_data$y_original[plot_data$Observed == 0] - plot_data$y_post[plot_data$Observed == 0])^2))
 
 # rmse = sqrt(colSums((y_original[-test_index] - mean_y_post)^2)/n)
 cat("RMSE (In-sample) = ", rmse, "\n")
 
-rmse2 = sqrt(sum((y_original[test_index] - mean_new_y_post[1:nrow(x_predict),])^2)/test_n)
+rmse2 <- sqrt(sum((y_original[test_index] - mean_new_y_post[1:nrow(x_predict),])^2)/test_n)
 cat("RMSE (Out-of-sample) = ", rmse2, "\n")
 ```
 
 
 ```{r, echo=FALSE, eval=FALSE, include=FALSE}
-k = 1
-batch_size = c(rep(floor(nrow(data)/k), k-1), floor(nrow(data)/k) + (nrow(data)%%k))
-rand_id = sample(seq_len(nrow(data)), nrow(data))
-batch_id = split(rand_id, rep(1:k, batch_size))
+k <- 1
+batch_size <- c(rep(floor(nrow(data)/k), k - 1), floor(nrow(data)/k) + (nrow(data) %% k))
+rand_id <- sample(seq_len(nrow(data)), nrow(data))
+batch_id <- split(rand_id, rep(seq_len(k), batch_size))
 
-rmse_train = vector(length = k)
-rmse_test = vector(length = k)
+rmse_train <- vector(length = k)
+rmse_test <- vector(length = k)
 
-rmse_train2 = vector(length = k)
-rmse_test2 = vector(length = k)
+rmse_train2 <- vector(length = k)
+rmse_test2 <- vector(length = k)
 
-for(i in seq_along(batch_size)){
+for(i in seq_along(batch_size)) {
   cat("Performing cross-validation for Batch ", i, "\n")
-  test_index = batch_id[[i]]
-  x_test = x[test_index,]
-  x_train = x[-test_index,]
-  y_test = y[test_index,,drop=FALSE]
-  y_train = y[-test_index,,drop=FALSE]
+  test_index <- batch_id[[i]]
+  x_test <- x[test_index,]
+  x_train <- x[-test_index,]
+  y_test <- y[test_index,, drop=FALSE]
+  y_train <- y[-test_index,, drop=FALSE]
   
-  missing_id = which(is.na(y_train))
-  missing_id_test = which(is.na(y_test))
+  missing_id <- which(is.na(y_train))
+  missing_id_test <- which(is.na(y_test))
   
-  BART = missBART2(x = x_train, y = y_train, x_predict = x_test, n_reg_trees = 90, n_class_trees = 90, 
-                   burn = 500, iters = 1000, thin = 2, 
+  BART <- missBART2(x = x_train, y = y_train, x_predict = x_test, n_reg_trees = 90, 
+                    n_class_trees = 90, burn = 500, iters = 1000, thin = 2, 
                    predict = TRUE, show_progress = TRUE)
   
-  mean_y_post = Reduce("+", BART$y_post)/length(BART$y_post)
-  mean_y_post = unscale(mean_y_post, min = BART$min_y, max = BART$max_y)
+  mean_y_post <- Reduce("+", BART$y_post)/length(BART$y_post)
+  mean_y_post <- unscale(mean_y_post, min = BART$min_y, max = BART$max_y)
   
-  mean_new_y_post = Reduce("+", BART$new_y_post)/length(BART$new_y_post)
-  mean_new_y_post = unscale(mean_new_y_post, min = BART$min_y, max = BART$max_y)
+  mean_new_y_post <- Reduce("+", BART$new_y_post)/length(BART$new_y_post)
+  mean_new_y_post <- unscale(mean_new_y_post, min = BART$min_y, max = BART$max_y)
   
-  for(j in 1:ncol(y)){
-    rmse_train[i,j] = sqrt(colSums((y_train[,j] - mean_y_post[,j)^2)/nrow(y_train[,j]))
-    rmse_test[i,j] = sqrt(colSums((y_test[,j] - mean_new_y_post[,j])^2)/nrow(y_test[,j]))
+  for(j in 1:ncol(y)) {
+    rmse_train[i,j] <- sqrt(colSums((y_train[,j] - mean_y_post[,j)^2)/nrow(y_train[,j]))
+    rmse_test[i,j] <- sqrt(colSums((y_test[,j] - mean_new_y_post[,j])^2)/nrow(y_test[,j]))
 
-    plot1 = ggplot(data = data.frame(y = y_train[,j,drop(TRUE)], y_hat = mean_y_post[,j]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_y_post[,j,drop=FALSE]), aes(x = mean_y_post[,j,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBART2: Training batch ", i)) + geom_abline(intercept = 0) 
+    plot1 <- ggplot(data = data.frame(y = y_train[,j, drop=TRUE], y_hat = mean_y_post[,j]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_y_post[,j, drop=FALSE]), aes(x = mean_y_post[,j, drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBART2: Training batch ", i)) + geom_abline(intercept = 0) 
     
-    plot2 = ggplot(data = data.frame(y = y_test[-missing_id_test,,drop(TRUE)], y_hat = mean_new_y_post[-missing_id_test]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_new_y_post[missing_id_test,,drop=FALSE]), aes(x = mean_new_y_post[missing_id_test,,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBART2: Testing batch ", i)) + geom_abline(intercept = 0)
+    plot2 <- ggplot(data = data.frame(y = y_test[-missing_id_test,, drop=TRUE], y_hat = mean_new_y_post[-missing_id_test]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_new_y_post[missing_id_test,, drop=FALSE]), aes(x = mean_new_y_post[missing_id_test,, drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBART2: Testing batch ", i)) + geom_abline(intercept = 0)
     
     grid.arrange(plot1, plot2, ncol = 2, newpage = TRUE)
   }
@@ -439,29 +447,29 @@ for(i in seq_along(batch_size)){
   ######## missBARTprobit ########
   
   x_test = x_mice[test_index,]
-  x_train = x_mice[-test_index,]
-  y_test = y_mice[test_index,,drop=FALSE]
-  y_train = y_mice[-test_index,,drop=FALSE]
+  x_train <- x_mice[-test_index,]
+  y_test <- y_mice[test_index,, drop=FALSE]
+  y_train <- y_mice[-test_index,, drop=FALSE]
   
-  missing_id = which(is.na(y[-test_index,,drop=FALSE]))
-  missing_id_test = which(is.na(y[test_index,]))
+  missing_id <- which(is.na(y[-test_index,, drop=FALSE]))
+  missing_id_test <- which(is.na(y[test_index,]))
   
-  BART2 = missBARTprobit(x = x_train, y = y_train, x_predict = x_test, n_trees = 90, 
-                   burn = 500, iters = 1000, thin = 2, 
-                   predict = TRUE, show_progress = TRUE)
+  BART2 <- missBARTprobit(x = x_train, y = y_train, x_predict = x_test, n_trees = 90, 
+                          burn = 500, iters = 1000, thin = 2, 
+                          predict = TRUE, show_progress = TRUE)
   
-  mean_y_post = Reduce("+", BART2$y_post)/length(BART2$y_post)
-  mean_y_post = unscale(mean_y_post, min = BART2$min_y, max = BART2$max_y)
+  mean_y_post <- Reduce("+", BART2$y_post)/length(BART2$y_post)
+  mean_y_post <- unscale(mean_y_post, min = BART2$min_y, max = BART2$max_y)
   
-  mean_new_y_post = Reduce("+", BART2$new_y_post)/length(BART2$new_y_post)
-  mean_new_y_post = unscale(mean_new_y_post, min = BART2$min_y, max = BART2$max_y)
+  mean_new_y_post <- Reduce("+", BART2$new_y_post)/length(BART2$new_y_post)
+  mean_new_y_post <- unscale(mean_new_y_post, min = BART2$min_y, max = BART2$max_y)
   
-  rmse_train2[i] = sqrt(sum((y_train[-missing_id,] - mean_y_post[-missing_id])^2)/nrow(y_train[-missing_id,,drop=FALSE]))
-  rmse_test2[i] = sqrt(sum((y_test[-missing_id_test,] - mean_new_y_post[-missing_id_test])^2)/nrow(y_test[-missing_id_test,,drop=FALSE]))
+  rmse_train2[i] <- sqrt(sum((y_train[-missing_id,] - mean_y_post[-missing_id])^2)/nrow(y_train[-missing_id,, drop=FALSE]))
+  rmse_test2[i] <- sqrt(sum((y_test[-missing_id_test,] - mean_new_y_post[-missing_id_test])^2)/nrow(y_test[-missing_id_test,, drop=FALSE]))
   
-  plot1 = ggplot(data = data.frame(y = y_train[-missing_id,,drop(TRUE)], y_hat = mean_y_post[-missing_id]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_y_post[missing_id,,drop=FALSE]), aes(x = mean_y_post[missing_id,,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBART2: Training batch ", i)) + geom_abline(intercept = 0) 
+  plot1 <- ggplot(data = data.frame(y = y_train[-missing_id,, drop=TRUE], y_hat = mean_y_post[-missing_id]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_y_post[missing_id,, drop=FALSE]), aes(x = mean_y_post[missing_id,, drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBART2: Training batch ", i)) + geom_abline(intercept = 0) 
   
-  plot2 = ggplot(data = data.frame(y = y_test[-missing_id_test,,drop(TRUE)], y_hat = mean_new_y_post[-missing_id_test]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_new_y_post[missing_id_test,,drop=FALSE]), aes(x = mean_new_y_post[missing_id_test,,drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBARTprobit: Testing batch ", i)) + geom_abline(intercept = 0)
+  plot2 <- ggplot(data = data.frame(y = y_test[-missing_id_test,, drop=TRUE], y_hat = mean_new_y_post[-missing_id_test]), aes(x=y_hat, y=y)) + geom_point() + geom_rug(data = data.frame(mean_new_y_post[missing_id_test,, drop=FALSE]), aes(x = mean_new_y_post[missing_id_test,, drop=FALSE]), inherit.aes = FALSE) + xlab("Predicted Y") + ylab("Data Y") + ggtitle(paste("missBARTprobit: Testing batch ", i)) + geom_abline(intercept = 0)
   
   grid.arrange(plot1, plot2, ncol = 2, newpage = TRUE)
   
