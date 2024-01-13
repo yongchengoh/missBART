@@ -59,6 +59,16 @@ missBARTprobit(
 
 \item{progress_every}{integer value stating how often to update the progress bar.}
 
+\item{pdp_range}{range for partial dependence plots}
+
+\item{make_pdp}{logical indicating whether to produce a partial dependence plot}
+
+\item{mice_impute}{logical indicating whether to impute missing values via mice prior to prior calibration}
+
+\item{true_trees_data}{true trees for BART component}
+
+\item{true_change_points}{true change points for BART trees}
+
 \item{...}{Catches unused arguments}
 }
 \value{
@@ -68,8 +78,8 @@ a list containing BART predictions and imputed values
 BART and probit regression for data with non-ignorable missingness in the response.
 }
 \examples{
-x <- matrix(runif(6), ncol = 2)
-y <- matrix(runif(6), ncol = 2) \%*\% matrix(rnorm(4), ncol=2)
-bart_out <- missBARTprobit(x, y, n_trees = 2, burn = 2,
-                           iters = 2, thin = 1, scale = FALSE)
+# x <- matrix(runif(6), ncol = 2)
+# y <- matrix(runif(6), ncol = 2) \%*\% matrix(rnorm(4), ncol=2)
+# bart_out <- missBARTprobit(x, y, n_trees = 2, burn = 2,
+#                            iters = 2, thin = 1, scale = FALSE)
 }

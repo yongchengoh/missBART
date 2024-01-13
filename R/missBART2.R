@@ -16,16 +16,27 @@
 #' @param include_y Include y in probit model?
 #' @param show_progress logical
 #' @param progress_every integer value stating how often to update the progress bar.
+#' @param MH_sd standard deviation for MH proposal for missing Y
+#' @param pdp_range range for partial dependence plots
+#' @param make_pdp logical indicating whether to produce a partial dependence plot
+#' @param mice_impute logical indicating whether to impute missing values via mice prior to prior calibration
+#' @param true_trees_data true trees for BART component
+#' @param true_trees_missing true trees for probit BART component
+#' @param z_true true latent variable for probit BART component
+#' @param true_change_points true change points for BART trees
+#' @param true_change_points_miss true change points for probit BART trees
 #' @param ... Catches unused arguments
 #'
+#' @importFrom extraDistr "rtnorm"
+#' @importFrom mice "complete" "mice"
 #' @return a list containing BART predictions and imputed values
 #' @export
 #'
 #' @examples
-#' x <- matrix(runif(6), ncol = 2)
-#' y <- matrix(runif(6), ncol = 2) %*% matrix(rnorm(4), ncol=2)
-#' bart_out <- missBART2(x, y, n_trees = 2, burn = 2,
-#'                       iters = 2, thin = 1, scale = FALSE)
+#' # x <- matrix(runif(6), ncol = 2)
+#' # y <- matrix(runif(6), ncol = 2) %*% matrix(rnorm(4), ncol=2)
+#' # bart_out <- missBART2(x, y, n_trees = 2, burn = 2,
+#' #                       iters = 2, thin = 1, scale = FALSE)
 missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 100, burn = 1000, iters = 1000, thin = 2, predict = TRUE, MH_sd = 0.5,
                       tree_prior_params = tree_list(...), hypers = hypers_list(...),
                       scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10,
@@ -78,12 +89,12 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 <- rep(hypers$mu0, p)
-  kappa_reg <- ifelse(is.null(hypers$kappa), 4 * (qnorm(0.9))^2 * n_reg_trees, hypers$kappa)
+  kappa_reg <- ifelse(is.null(hypers$kappa), 4 * (stats::qnorm(0.9))^2 * n_reg_trees, hypers$kappa)
   nu <- hypers$df
-  qchi <- qchisq(1 - hypers$q, nu)
+  qchi <- stats::qchisq(1 - hypers$q, nu)
   sigest <- rep(0, p)
   for(i in seq_len(p)) {
-    sigest[i] <- summary(lm(y[,i]~x))$sigma
+    sigest[i] <- summary(stats::lm(y[,i]~x))$sigma
   }
   lambda <- (sigest^2) * qchi/nu
   # print(paste("nu =", nu))
@@ -185,7 +196,7 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   z[m == 0] <- -1
 
   new_R <- diag(p)
-  new_omega <- diag(rgamma(p, shape = nu/2, rate = nu * lambda/2), p)
+  new_omega <- diag(stats::rgamma(p, shape = nu/2, rate = nu * lambda/2), p)
   Y <- probit_predictors(x, y, include_x = include_x, include_y = include_y)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####

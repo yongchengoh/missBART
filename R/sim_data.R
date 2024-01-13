@@ -5,6 +5,7 @@
 #' @param p number of responses
 #' @param scale_par scale_par
 #' @param omega_diag precision ~ rWishart(1, p + 1, diag(omega_diag, p))
+#' @param Omega allows user-supplied precision matrix
 #'
 #' @return A list with the following components
 #' \describe{
@@ -16,14 +17,14 @@
 #' \item{q}{number of covariates (always 5)}
 #' }
 #' @export
-#' @importFrom MASS mvrnorm
+#' @importFrom MASS "mvrnorm"
 #'
 #' @examples
-#' data <- sim_data_friedman(n = 1000, p = 3)
-#' true_trees_data <- data$true_trees
-#' y <- y_original <- data$y
-#' x <- data$x
-#' ome <- data$ome
+#' # data <- sim_data_friedman(n = 1000, p = 3)
+#' # true_trees_data <- data$true_trees
+#' # y <- y_original <- data$y
+#' # x <- data$x
+#' # ome <- data$ome
 sim_data_friedman <- function(n, p = 1, scale_par = 1, omega_diag = 1, Omega = NULL) {
   # Simulate some data using a multivariate version of Friedman
   # y <- 10sin(πx1x2)+20(x3−0.5)2+10x4+5x5+ε
@@ -34,7 +35,7 @@ sim_data_friedman <- function(n, p = 1, scale_par = 1, omega_diag = 1, Omega = N
     Omega <- stats::rWishart(1, p + 1, diag(omega_diag, p))[,,1]
   }
   if(p > 1) {
-    err = mvrnorm(n, mu=rep(0, ncol(Omega)), Sigma = solve(Omega))
+    err <- MASS::mvrnorm(n, mu=rep(0, ncol(Omega)), Sigma = solve(Omega))
   } else {
     err <- matrix(stats::rnorm(n, sd = 1/sqrt(Omega)), ncol = 1)
   }
@@ -55,6 +56,9 @@ sim_data_friedman <- function(n, p = 1, scale_par = 1, omega_diag = 1, Omega = N
 #' @param min_x min_x
 #' @param max_x max_x
 #' @param trees number of trees
+#' @param ome precision matrix
+#' @param kappa prior scaling factor
+#' @param splits tree splits
 #' @param ... Catches unused arguments
 #'
 #' @return A list with the following components
@@ -67,11 +71,11 @@ sim_data_friedman <- function(n, p = 1, scale_par = 1, omega_diag = 1, Omega = N
 #' @export
 #'
 #' @examples
-#' data <- sim_data_trees(n = 100, p = 3, q = 4, trees = 6)
-#' y <- y_original <- data$y
-#' x <- data$x
-#' ome <- data$ome
-#' true_trees_data <- data$true_trees
+#' # data <- sim_data_trees(n = 100, p = 3, q = 4, trees = 6)
+#' # y <- y_original <- data$y
+#' # x <- data$x
+#' # ome <- data$ome
+#' # true_trees_data <- data$true_trees
 sim_data_trees <- function(n, p, q, min_x = 0, max_x = 1, trees = 1, ome = NULL, kappa = NULL, splits = NULL, ...) {
   x <- matrix(stats::runif(n * q, min = min_x, max = max_x), ncol = q)
   sum_mu <- matrix(0, ncol = p, nrow = n)
@@ -122,10 +126,10 @@ sim_data_trees <- function(n, p, q, min_x = 0, max_x = 1, trees = 1, ome = NULL,
 #' @export
 #'
 #' @examples
-#' data <- sim_data_friedman(n = 1000, p = 3)
-#' missing <- sim_missing_probit(x = x, y = y, include_x = TRUE, include_y = TRUE,
-#'                               max_missing_prop = 0.99, min_node = 10,
-#'                               min_missing_prop = 0.7, intercept = TRUE)
+#' # data <- sim_data_friedman(n = 1000, p = 3)
+#' # missing <- sim_missing_probit(x = data$x, y = data$y, include_x = TRUE,
+#' #                               include_y = TRUE, max_missing_prop = 0.99,
+#' #                               min_node = 10, min_missing_prop = 0.7, intercept = TRUE)
 sim_missing_probit <- function(x, y, include_x = FALSE, include_y = FALSE, min_missing_prop = 0.6, max_missing_prop = 0.9, ...) {
   p <- ncol(y)
   q <- ncol(x)
@@ -147,7 +151,7 @@ sim_missing_probit <- function(x, y, include_x = FALSE, include_y = FALSE, min_m
   }
   Psi_1 <- rInvWishart(1, r + 1, diag(r))[,,1]
 
-  for(seed in sample(seq(1000,100000), size = 10000)){
+  for(seed in sample(seq(1000,100000), size = 10000)) {
     set.seed(seed)
 
     B <- matrnorm(matrix(0, nrow=r, ncol=p), Psi_1, corR)
@@ -200,10 +204,10 @@ sim_missing_probit <- function(x, y, include_x = FALSE, include_y = FALSE, min_m
 #' @export
 #'
 #' @examples
-#' data <- sim_data_trees(n = 100, p = 3, q = 4, trees = 6)
-#' missing <- sim_missing_trees(x = x, y = y, include_x = FALSE, include_y = TRUE,
-#'                              max_missing_prop = 0.99, min_node = 5,
-#'                              min_missing_prop = 0.7, trees = 1)
+#' # data <- sim_data_trees(n = 100, p = 3, q = 4, trees = 6)
+#' # missing <- sim_missing_trees(x = data$x, y = data$y, include_x = FALSE,
+#' #                              include_y = TRUE, max_missing_prop = 0.99,
+#' #                              min_node = 5, min_missing_prop = 0.7, trees = 1)
 sim_missing_trees <- function(x, y, trees = 1, include_x = FALSE, include_y = TRUE, min_missing_prop = 0.6, max_missing_prop = 0.9, ...) {
   p <- ncol(y)
   q <- ncol(x)

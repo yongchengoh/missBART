@@ -4,7 +4,15 @@
 \alias{hypers_list}
 \title{BART prior parameters}
 \usage{
-hypers_list(mu0 = 0, kappa = NULL, alpha = NULL, V = NULL, df = 10, q = 0.75)
+hypers_list(
+  mu0 = 0,
+  kappa = NULL,
+  alpha = NULL,
+  V = NULL,
+  df = 10,
+  q = 0.75,
+  ...
+)
 }
 \arguments{
 \item{mu0}{hyperparameter}
@@ -14,6 +22,12 @@ hypers_list(mu0 = 0, kappa = NULL, alpha = NULL, V = NULL, df = 10, q = 0.75)
 \item{alpha}{hyperparameter}
 
 \item{V}{hyperparameter}
+
+\item{df}{hyperparameter}
+
+\item{q}{hyperparameter}
+
+\item{...}{Catches unused arguments}
 }
 \value{
 list of hyperparameters

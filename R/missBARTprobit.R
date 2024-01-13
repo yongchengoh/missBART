@@ -15,16 +15,22 @@
 #' @param include_y logical. Include y in probit model?
 #' @param show_progress logical.
 #' @param progress_every integer value stating how often to update the progress bar.
+#' @param pdp_range range for partial dependence plots
+#' @param make_pdp logical indicating whether to produce a partial dependence plot
+#' @param mice_impute logical indicating whether to impute missing values via mice prior to prior calibration
+#' @param true_trees_data true trees for BART component
+#' @param true_change_points true change points for BART trees
 #' @param ... Catches unused arguments
 #'
+#' @importFrom mice "complete" "mice"
 #' @return a list containing BART predictions and imputed values
 #' @export
 #'
 #' @examples
-#' x <- matrix(runif(6), ncol = 2)
-#' y <- matrix(runif(6), ncol = 2) %*% matrix(rnorm(4), ncol=2)
-#' bart_out <- missBARTprobit(x, y, n_trees = 2, burn = 2,
-#'                            iters = 2, thin = 1, scale = FALSE)
+#' # x <- matrix(runif(6), ncol = 2)
+#' # y <- matrix(runif(6), ncol = 2) %*% matrix(rnorm(4), ncol=2)
+#' # bart_out <- missBARTprobit(x, y, n_trees = 2, burn = 2,
+#' #                            iters = 2, thin = 1, scale = FALSE)
 missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, iters = 1000, thin = 2, predict = TRUE, tree_prior_params = tree_list(...), hypers = hypers_list(...),
                            scale = TRUE, include_x = TRUE, include_y = TRUE,
                            show_progress = TRUE, progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = TRUE,
@@ -76,13 +82,13 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 <- rep(hypers$mu0, p)
-  kappa <- ifelse(is.null(hypers$kappa), 4 * (qnorm(0.9))^2 * n_trees, hypers$kappa)
+  kappa <- ifelse(is.null(hypers$kappa), 4 * (stats::qnorm(0.9))^2 * n_trees, hypers$kappa)
 
   nu <- hypers$df
-  qchi <- qchisq(1 - hypers$q, nu)
+  qchi <- stats::qchisq(1 - hypers$q, nu)
   sigest <- rep(0, p)
   for(i in seq_len(p)) {
-    sigest[i] = summary(lm(y[,i]~x))$sigma
+    sigest[i] = summary(stats::lm(y[,i]~x))$sigma
   }
   lambda <- (sigest^2) * qchi/nu
   # print(paste("nu =", nu))
@@ -143,7 +149,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
   tree_prior <- lapply(seq_len(n_trees), function(x) tree_prior[x][[1]] = log(node_priors(0, prior_alpha, prior_beta)))
   # tree_accept <- lapply(seq_len(n_trees), function(x) tree_accept[x][[1]] = TRUE)
 
-  new_omega <- diag(rgamma(p, shape = nu/2, rate = nu * lambda/2), p)
+  new_omega <- diag(stats::rgamma(p, shape = nu/2, rate = nu * lambda/2), p)
 
   #####-------------------- CREATE STORAGE AND SET INITIAL VALUES FOR PROBIT MODEL --------------------#####
   B_post <- vector(mode = "list", length = 0)
@@ -337,7 +343,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
   } # End of i iterations
 
   if(!predict) new_y_post <- NA
-  if(!make_pdp || p>1) pdp_out <- NA
+  if(!make_pdp || p > 1) pdp_out <- NA
 
   return(list(y_post = y_post, omega_post = omega_post, R_post = R_post, B_post = B_post,
               new_y_post = new_y_post, accepted_trees = accepted_trees, y_impute = y_impute,

@@ -46,8 +46,8 @@ A list with the following components
 Simulating missing values from a probit regression model
 }
 \examples{
-data <- sim_data_friedman(n = 1000, p = 3)
-missing <- sim_missing_probit(x = x, y = y, include_x = TRUE, include_y = TRUE,
-                              max_missing_prop = 0.99, min_node = 10,
-                              min_missing_prop = 0.7, intercept = TRUE)
+# data <- sim_data_friedman(n = 1000, p = 3)
+# missing <- sim_missing_probit(x = data$x, y = data$y, include_x = TRUE,
+#                               include_y = TRUE, max_missing_prop = 0.99,
+#                               min_node = 10, min_missing_prop = 0.7, intercept = TRUE)
 }

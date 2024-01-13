@@ -48,8 +48,8 @@ A list with the following components
 Simulate missing data from a BART model
 }
 \examples{
-data <- sim_data_trees(n = 100, p = 3, q = 4, trees = 6)
-missing <- sim_missing_trees(x = x, y = y, include_x = FALSE, include_y = TRUE,
-                             max_missing_prop = 0.99, min_node = 5,
-                             min_missing_prop = 0.7, trees = 1)
+# data <- sim_data_trees(n = 100, p = 3, q = 4, trees = 6)
+# missing <- sim_missing_trees(x = data$x, y = data$y, include_x = FALSE,
+#                              include_y = TRUE, max_missing_prop = 0.99,
+#                              min_node = 5, min_missing_prop = 0.7, trees = 1)
 }

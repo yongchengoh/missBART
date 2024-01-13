@@ -49,6 +49,8 @@ mvBART(
 
 \item{progress_every}{integer value stating how often to update the progress bar.}
 
+\item{true_trees_data}{true trees for BART component}
+
 \item{...}{Catches unused arguments}
 }
 \value{
@@ -58,7 +60,7 @@ An object of class \code{"BART"}.
 Title
 }
 \examples{
-data <- sim_data_friedman(n = 100, p = 2)
-bart_out <- mvBART(data$x, data$y, n_trees = 90, burn = 500,
-                   iters = 1000, thin = 2, predict = FALSE)
+# data <- sim_data_friedman(n = 100, p = 2)
+# bart_out <- mvBART(data$x, data$y, n_trees = 90, burn = 500,
+#                    iters = 1000, thin = 2, predict = FALSE)
 }

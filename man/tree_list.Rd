@@ -4,7 +4,13 @@
 \alias{tree_list}
 \title{Tree prior parameters}
 \usage{
-tree_list(prior_alpha = 0.95, prior_beta = 2, min_node = 1, max_attempt = 1)
+tree_list(
+  prior_alpha = 0.95,
+  prior_beta = 2,
+  min_node = 1,
+  max_attempt = 1,
+  ...
+)
 }
 \arguments{
 \item{prior_alpha}{hyperparameter}
@@ -14,6 +20,8 @@ tree_list(prior_alpha = 0.95, prior_beta = 2, min_node = 1, max_attempt = 1)
 \item{min_node}{minimum number of observations that should fall into a single terminal node.}
 
 \item{max_attempt}{maximum number of attempts to find a suitable tree}
+
+\item{...}{Catches unused arguments}
 }
 \value{
 list of hyperparameters

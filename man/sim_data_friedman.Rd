@@ -14,6 +14,8 @@ sim_data_friedman(n, p = 1, scale_par = 1, omega_diag = 1, Omega = NULL)
 \item{scale_par}{scale_par}
 
 \item{omega_diag}{precision ~ rWishart(1, p + 1, diag(omega_diag, p))}
+
+\item{Omega}{allows user-supplied precision matrix}
 }
 \value{
 A list with the following components
@@ -30,9 +32,9 @@ A list with the following components
 Simulate
 }
 \examples{
-data <- sim_data_friedman(n = 1000, p = 3)
-true_trees_data <- data$true_trees
-y <- y_original <- data$y
-x <- data$x
-ome <- data$ome
+# data <- sim_data_friedman(n = 1000, p = 3)
+# true_trees_data <- data$true_trees
+# y <- y_original <- data$y
+# x <- data$x
+# ome <- data$ome
 }

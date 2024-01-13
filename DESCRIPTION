@@ -14,9 +14,10 @@ Imports:
   Matrix, 
   CholWishart,
   extraDistr,
+  ggplot2,
   MASS,
-  purrr,
-  tmvtnorm
+  mice,
+  TruncatedNormal
 RoxygenNote: 7.2.3
 Suggests: 
     knitr,

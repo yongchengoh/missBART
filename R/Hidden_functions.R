@@ -4,6 +4,11 @@ rMVNmu0 <- function(Q) {
   if(p == 1) z/sqrt(Q) else backsolve(PD_chol(Q), z, k=p)
 }
 
+rbernoulli <- function(n, p = 0.5) {
+  stats::runif(n) > (1 - p)
+}
+
+#' @importFrom Matrix "nearPD"
 PD_chol <- function(x, ...) tryCatch(chol(x, ...), error=function(e) {
   chol(Matrix::nearPD(x, base.matrix=TRUE)$mat, ...)
 })
@@ -81,6 +86,8 @@ probit_predictors <- function(x, y, include_x = TRUE, include_y = TRUE, intercep
   return(Y)
 }
 
+#' @importFrom extraDistr "rtnorm"
+#' @importFrom TruncatedNormal "rtmvnorm"
 update_z <- function(Y, m, B, R) {
   n <- nrow(Y)
   p <- ncol(m)
@@ -126,13 +133,12 @@ update_B <- function(y, z, Y, tau_b){
 }
 
 # MCMC sample of W, the latent variable in probit regression introduced by \cite{Talhouk, A., Doucet, A., & Murphy, K. (2012). Efficient Bayesian inference for multivariate probit models with sparse inverse correlation matrices. Journal of Computational and Graphical Statistics, 21(3), 739-757.}
-#' @importFrom extraDistr "rinvgamma"
-  d2 = rinvgamma(p, shape, scale_vec)
 update_W <- function(R, z) {
   p <- ncol(R)
   R_inv <- chol2inv(PD_chol(R))
   shape <- (p + 1)/2
   scale_vec <- diag(R_inv)/2
+  d2 <- 1/stats::rgamma(p, shape, scale_vec)
   D <- diag(sqrt(d2), p)
   W <- z %*% D
   return(W)
@@ -453,8 +459,7 @@ pdp_param_mat_list <- function(x, y_range = c(-0.5, 0.5), grid_len = 20, interce
     }
   } else {
     if(missing(n)) {
-      warning("Need to provide length of data")
-      break
+      stop("Need to provide length of data")
     }
     param_mat_list <- matrix(y_grid, ncol=1)
     if(intercept) param_mat_list <- cbind(1, param_mat_list[[i]])
@@ -462,17 +467,18 @@ pdp_param_mat_list <- function(x, y_range = c(-0.5, 0.5), grid_len = 20, interce
   return(param_mat_list)
 }
 
+#' @importFrom ggplot2 "ggplot" "aes" "geom_point" "geom_errorbar" "labs" "theme_bw" "coord_flip"
 plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c()) {
   if(missing(actual)) {
     actual <- Reduce("+", post_list)/length(post_list)
   }
   if(isSymmetric(actual)) {
     post <- Reduce(rbind, lapply(post_list, function(x) x[upper.tri(x, diag=TRUE)]))
-    perc <- apply(post, 2, quantile, q)
+    perc <- apply(post, 2, stats::quantile, q)
     predicted <- colMeans(post)
     actual <- matrix(actual[upper.tri(actual, diag = TRUE)], nrow=1)
   } else {
-    perc <- apply(Reduce(rbind, lapply(post_list, as.vector)), 2, quantile, q)
+    perc <- apply(Reduce(rbind, lapply(post_list, as.vector)), 2, stats::quantile, q)
     predicted <- as.vector(Reduce("+", post_list)/length(post_list))
   }
   data <- data.frame("actual" = as.vector(actual), "predicted" = predicted, "lower" = perc[1,], "upper" = perc[2,])
@@ -486,7 +492,7 @@ plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c
   }
   data$row.names <- factor(row_names, levels = row_names)
 
-  plot <- ggplot(data, aes(x = factor(row.names))) +
+  p <- ggplot(data, aes(x = factor(row.names))) +
     geom_point(aes(y = actual), col="black", size=1.3) +
     # geom_crossbar(aes(ymin = lower, ymax = upper, colour=as.factor(group)), width = 0.2) +
     geom_errorbar(aes(ymin = lower, ymax = upper, colour=as.factor(group)), width=0.5) +
@@ -495,6 +501,6 @@ plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c
     # scale_color_brewer(palette="RdYlGn") +
     theme_bw() +
     coord_flip()
-  return(plot)
+  print(p)
+  invisible(p)
 }
-

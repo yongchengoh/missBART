@@ -8,7 +8,6 @@
 #' @param probit logical. Indicates whether tree is for continuous or binary outcomes.
 #' @param miss_row index of missing rows
 #' @param cat_list list of used categorical subset
-#' @importFrom purrr "rbernoulli"
 #'
 #' @return A dataframe containing details of a new tree structure
 #' @export

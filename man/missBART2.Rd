@@ -52,6 +52,8 @@ missBART2(
 
 \item{predict}{make out-of-sample predictions?}
 
+\item{MH_sd}{standard deviation for MH proposal for missing Y}
+
 \item{tree_prior_params}{prior parameters for BART trees}
 
 \item{hypers}{prior parameters for BART parameters}
@@ -66,6 +68,22 @@ missBART2(
 
 \item{progress_every}{integer value stating how often to update the progress bar.}
 
+\item{pdp_range}{range for partial dependence plots}
+
+\item{make_pdp}{logical indicating whether to produce a partial dependence plot}
+
+\item{mice_impute}{logical indicating whether to impute missing values via mice prior to prior calibration}
+
+\item{true_trees_data}{true trees for BART component}
+
+\item{true_trees_missing}{true trees for probit BART component}
+
+\item{z_true}{true latent variable for probit BART component}
+
+\item{true_change_points}{true change points for BART trees}
+
+\item{true_change_points_miss}{true change points for probit BART trees}
+
 \item{...}{Catches unused arguments}
 }
 \value{
@@ -75,8 +93,8 @@ a list containing BART predictions and imputed values
 Title
 }
 \examples{
-x <- matrix(runif(6), ncol = 2)
-y <- matrix(runif(6), ncol = 2) \%*\% matrix(rnorm(4), ncol=2)
-bart_out <- missBART2(x, y, n_trees = 2, burn = 2,
-                      iters = 2, thin = 1, scale = FALSE)
+# x <- matrix(runif(6), ncol = 2)
+# y <- matrix(runif(6), ncol = 2) \%*\% matrix(rnorm(4), ncol=2)
+# bart_out <- missBART2(x, y, n_trees = 2, burn = 2,
+#                       iters = 2, thin = 1, scale = FALSE)
 }

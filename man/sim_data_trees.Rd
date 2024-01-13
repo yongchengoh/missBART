@@ -30,6 +30,12 @@ sim_data_trees(
 
 \item{trees}{number of trees}
 
+\item{ome}{precision matrix}
+
+\item{kappa}{prior scaling factor}
+
+\item{splits}{tree splits}
+
 \item{...}{Catches unused arguments}
 }
 \value{
@@ -45,9 +51,9 @@ A list with the following components
 Simulating data from trees
 }
 \examples{
-data <- sim_data_trees(n = 100, p = 3, q = 4, trees = 6)
-y <- y_original <- data$y
-x <- data$x
-ome <- data$ome
-true_trees_data <- data$true_trees
+# data <- sim_data_trees(n = 100, p = 3, q = 4, trees = 6)
+# y <- y_original <- data$y
+# x <- data$x
+# ome <- data$ome
+# true_trees_data <- data$true_trees
 }

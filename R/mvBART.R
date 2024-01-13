@@ -13,15 +13,16 @@
 #' @param scale logical. Whether to scale data to range (-0.5, 0.5).
 #' @param show_progress logical.
 #' @param progress_every integer value stating how often to update the progress bar.
+#' @param true_trees_data true trees for BART component
 #' @param ... Catches unused arguments
 #'
 #' @return An object of class \code{"BART"}.
 #' @export
 #'
 #' @examples
-#' data <- sim_data_friedman(n = 100, p = 2)
-#' bart_out <- mvBART(data$x, data$y, n_trees = 90, burn = 500,
-#'                    iters = 1000, thin = 2, predict = FALSE)
+#' # data <- sim_data_friedman(n = 100, p = 2)
+#' # bart_out <- mvBART(data$x, data$y, n_trees = 90, burn = 500,
+#' #                    iters = 1000, thin = 2, predict = FALSE)
 mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 1000, thin = 2, predict = TRUE, tree_prior_params = tree_list(...), hypers = hypers_list(...),
                   scale = TRUE, show_progress = TRUE, progress_every = 10, true_trees_data = NA, ...) {
 
@@ -56,13 +57,13 @@ mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 100
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 <- rep(hypers$mu0, p)
-  kappa <- 4 * (qnorm(0.9))^2 * n_trees
+  kappa <- 4 * (stats::qnorm(0.9))^2 * n_trees
 
   nu <- hypers$df
-  qchi <- qchisq(1 - hypers$q, nu)
+  qchi <- stats::qchisq(1 - hypers$q, nu)
   sigest <- rep(0, p)
   for(i in seq_len(p)) {
-    sigest[i] <- summary(lm(y[,i]~x))$sigma
+    sigest[i] <- summary(stats::lm(y[,i]~x))$sigma
   }
   lambda <- (sigest^2) * qchi/nu
   # print(paste("nu =", nu))
@@ -125,7 +126,7 @@ mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 100
   y_post <- vector(mode = "list", length = 0)
   y_pred <- vector(mode = "list", length = 0)
 
-  new_omega <- diag(rgamma(p, shape = nu/2, rate = nu * lambda/2), p)
+  new_omega <- diag(stats::rgamma(p, shape = nu/2, rate = nu * lambda/2), p)
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict) {
