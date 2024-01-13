@@ -85,8 +85,8 @@ sim_data_trees <- function(n, p, q, min_x = 0, max_x = 1, trees = 1, ome = NULL,
     df1 <- data.frame(matrix(ncol = 8, nrow = 1))
     colnames(df1) <- c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction", "NA_direction")
     df1[1,] <- c(0,0,1,0,1,0,0,NA)
-    mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
     if(is.null(splits)) n_splits <- sample(seq(1, 5), 1)
+    mu <- multi_rMVN(matrix(0, ncol=p, nrow = n_splits + 1), diag(kappa, p))
     for(j in seq_len(n_splits)) {
       new_tree <- propose_tree(df1, x, min_node = 20, max_attempt = 10, i = 2)
       df1 <- new_tree$new_df
@@ -138,25 +138,25 @@ sim_missing_probit <- function(x, y, include_x = FALSE, include_y = FALSE, min_m
   } else if (include_x && include_y) {
     r <- 1 + p + q
   }
-    psd = all(eigen(corR)$values >= 0)
   corR <- diag(p)
   psd <- FALSE
   while(!psd) {
     corR[upper.tri(corR)] <- sample(seq(-1, 1, length=100), sum(seq_len(p - 1)))
     corR[lower.tri(corR)] <- t(corR)[lower.tri(corR)]
+    psd <- all(eigen(corR, only.values=TRUE)$values >= 0)
   }
   Psi_1 <- rInvWishart(1, r + 1, diag(r))[,,1]
 
   for(seed in sample(seq(1000,100000), size = 10000)){
     set.seed(seed)
 
-    if(include_x & !include_y){
-      phi = cbind(rep(1, n), x) %*% B
-    } else if (!include_x & include_y){
-      phi = cbind(rep(1,n), y) %*% B
-    } else if (include_x & include_y){
-      phi = cbind(rep(1,n), x, y) %*% B
     B <- matrnorm(matrix(0, nrow=r, ncol=p), Psi_1, corR)
+    if(include_x && !include_y) {
+      phi <- cbind(1, x) %*% B
+    } else if(!include_x && include_y) {
+      phi <- cbind(1, y) %*% B
+    } else if(include_x && include_y) {
+      phi <- cbind(1, x, y) %*% B
     } else {
       phi <- matrix(B, nrow = n, ncol = p, byrow = TRUE)
     }
@@ -164,12 +164,12 @@ sim_missing_probit <- function(x, y, include_x = FALSE, include_y = FALSE, min_m
     m <- matrix(1, nrow=n, ncol=p)
     m[z_mod <= 0] <- 0
 
-    mis_prop = colSums(m)/n
+    mis_prop <- colMeans(m)
     if(all(mis_prop > min_missing_prop) & all(mis_prop < max_missing_prop)) break
   }
 
-  missing_prop = colSums(m)/n
   y[m == 0] <- NA
+  missing_prop <- colMeans(m)
   missing_index <- which(is.na(y))
   obs_index <- which(!is.na(y))
 
@@ -240,24 +240,24 @@ sim_missing_trees <- function(x, y, trees = 1, include_x = FALSE, include_y = TR
         new_tree <- propose_tree(df2, Y, min_node = min_node, max_attempt = 10, i = 2)
         df2 <- new_tree$new_df
       }
-      mu = multi_rMVN(matrix(0, ncol=p, nrow = n_splits+1), kappa*diag(1,p))
+      mu <- multi_rMVN(matrix(0, ncol=p, nrow = n_splits + 1), diag(kappa, p))
       # mu <- matrix(c(1, -0.7, 1), ncol=1)
       true_trees[[i]] <- df2
       sum_mu <- sum_mu + mu[new_tree$change_points,, drop=FALSE]
     }
-    mis_prop = colSums(m)/n
     z_mod <- multi_rMVN(mean_mat = sum_mu, precision = diag(p))
     m <- matrix(1, nrow=n, ncol=p)
     m[z_mod <= 0] <- 0
+    mis_prop <- colMeans(m)
 
     if(all(mis_prop > min_missing_prop) & all(mis_prop < max_missing_prop)) break
   }
 
-  missing_prop = colSums(m)/n
-  miss_row = apply(y, 1, function(x) any(is.na(x)))
   y[m == 0] <- NA
+  missing_prop <- colMeans(m)
   missing_index <- which(is.na(y))
   obs_index <- which(!is.na(y))
+  miss_row <- apply(is.na(y), 1, any)
 
   return(list(m = m, missing_y = y, missing_prop = missing_prop, missing_index = missing_index, obs_index = obs_index, true_trees = true_trees, z = z_mod))
 }

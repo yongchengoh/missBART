@@ -74,9 +74,14 @@ mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 100
     print(paste("sd_ols", (sigest  *(max_y - min_y))^2))
     print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
 
-    if(is.null(hypers$V)) {V = diag(1/(lambda*alpha), p)} else {V = hypers$V}
-    Vinv = solve(V)
     alpha <- ifelse(is.null(hypers$alpha), nu, hypers$alpha)
+    if(is.null(hypers$V)) {
+      V <- diag(1/(lambda * alpha), p)
+      Vinv <- diag(lambda * alpha,  p)
+    } else {
+      V <- hypers$V
+      Vinv <- solve(V)
+    }
   }
   # for(j in seq_len(p)) {
   #   curve(dgamma(x, shape = nu/2, rate = nu * lambda[j]/2), from = 0, to = 100)
@@ -111,7 +116,7 @@ mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 100
   accepted_trees <- lapply(seq_len(n_trees), function(x) accepted_trees[[x]] = df)
   change_id <- lapply(seq_len(n_trees), function(x) change_id[[x]] = rep(1, n))
 
-  tree_mu[[1]] = sapply(seq_len(n_trees), function(x) list(rMVN(mu = matrix(mu0, nrow=p), Q = kappa*diag(p))))
+  tree_mu[[1]] <- sapply(seq_len(n_trees), function(x) list(rMVN(mu = matrix(mu0, nrow=p), Q = diag(kappa, p))))
   tree_phi <- lapply(seq_len(n_trees), function(x) rep(tree_mu[[1]][[x]], n))
 
   tree_prior <- lapply(seq_len(n_trees), function(x) tree_prior[x][[1]] = log(node_priors(0, prior_alpha, prior_beta)))

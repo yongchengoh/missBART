@@ -45,9 +45,9 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
     }
   }
 
-  miss_row = apply(y, 1, function(x) any(is.na(x)))
   missing_index <- which(is.na(y))
   obs_index <- which(!is.na(y))
+  miss_row <- apply(is.na(y), 1, any)
 
   min_y <- apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
   max_y <- apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
@@ -95,9 +95,14 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
     print(paste("sd_ols", (sigest * (max_y - min_y))^2))
     print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
 
-    if(is.null(hypers$V)) {V = diag(1/(lambda*alpha), p)} else {V = hypers$V}
-    Vinv = solve(V)
     alpha <- ifelse(is.null(hypers$alpha), nu, hypers$alpha)
+    if(is.null(hypers$V)) {
+      V <- diag(1/(lambda * alpha), p)
+      Vinv <- diag(lambda * alpha,  p)
+    } else {
+      V <- hypers$V
+      Vinv <- solve(V)
+    }
   }
   # for(j in seq_len(p)) {
   #   curve(dgamma(x, shape = nu/2, rate = nu * lambda[j]/2), from = 0, to = 100)
@@ -158,7 +163,7 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
 
   # kappa_reg_list <- c()
 
-  reg_mu[[1]] = sapply(seq_len(n_reg_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = kappa_reg*diag(p))))
+  reg_mu[[1]] <- sapply(seq_len(n_reg_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = diag(kappa_reg, p))))
   reg_phi <- lapply(seq_len(n_reg_trees), function(x) rep(reg_mu[[1]][[x]], n))
 
   reg_prior <- lapply(seq_len(n_reg_trees), function(x) reg_prior[x][[1]] = log(node_priors(0, prior_alpha, prior_beta)))
@@ -170,7 +175,7 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
 
   kappa_class <- (4/9) * (n_class_trees)
 
-  class_mu[[1]] = sapply(seq_len(n_class_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = kappa_class*diag(p))))
+  class_mu[[1]] <- sapply(seq_len(n_class_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = diag(kappa_class, p))))
   class_phi <- lapply(seq_len(n_class_trees), function(x) rep(class_mu[[1]][[x]], n))
 
   class_prior <- lapply(seq_len(n_class_trees), function(x) class_prior[x][[1]] = log(node_priors(0, prior_alpha, prior_beta)))

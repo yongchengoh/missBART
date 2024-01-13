@@ -58,12 +58,12 @@ sim_omega <- function(y, y_hat, nu = NULL, lambda = NULL, alpha = NULL, Vinv = N
   return(omega)
 }
 
-  rate = b + sum(apply(mu_mat, 1, crossprod))/2
 sim_kappa <- function(mu, a, b) { #tree_mu[[i]]
   mu_mat <- Reduce(rbind, mu)
   p <- ncol(mu_mat)
   n_mu <- nrow(mu_mat)
   shape <- n_mu * p/2
+  rate <- b + sum(mu_mat^2)/2
   return(stats::rgamma(1, shape, rate))
 }
 
@@ -107,20 +107,20 @@ update_z <- function(Y, m, B, R) {
 }
 
 # MCMC sample of B, the matrix of probit parameters
-  U = chol2inv(chol(diag(tau_b, r) + t(Y)%*%Y))
-  M = t(t(z) %*% Y %*% U)
 update_B <- function(y, z, Y, tau_b){
   r <- ncol(Y)
   p <- ncol(y)
   V <- diag(p)
+  U <- chol2inv(chol(diag(tau_b, r) + crossprod(Y)))
+  M <- t(crossprod(z, Y) %*% U)
   return(matrnorm(M, U, V))
-  #   y_sum = y_sum + Y[i,] %*% t(Y[i,])
   # b <- colSums(sweep(Y, 1, z, "*"))
   # y_sum <- matrix(0, ncol = r, nrow = r)
   # for(i in 1:nrow(y)) {
+  #   y_sum <- y_sum + tcrossprod(Y[i,])
   # }
-  # mean = b %*% solve(Q)
   # Q <- diag(tau_b, r) + y_sum
+  # mean <- solve(Q, b)
   # return(matrix(rMVN(mu = mean, Q = Q), ncol = 1))
   # return(matrix(rMVNc(b = b, Q = Q), ncol = 1))
 }
@@ -140,15 +140,15 @@ update_W <- function(R, z) {
 
 # MCMC sample of \eqn{\Sigma} and \eqn{\gamma}, the latent variables in probit regression introduced by \cite{Talhouk, A., Doucet, A., & Murphy, K. (2012). Efficient Bayesian inference for multivariate probit models with sparse inverse correlation matrices. Journal of Computational and Graphical Statistics, 21(3), 739-757.}
 #' @importFrom CholWishart "rInvWishart"
-  Xi_inv = t(Y) %*% Y + Psi_inv
-  M = Xi %*% t(Y) %*% W
-  scale = t(W)%*%W + diag(1,p) - t(M) %*% Xi_inv %*% M
 update_sigma_gamma <- function(p, Y, Psi, W) {
   n <- nrow(Y)
   r <- ncol(Y)
   Psi_inv <- chol2inv(PD_chol(Psi))
+  Xi_inv <- crossprod(Y) + Psi_inv
   Xi <- chol2inv(PD_chol(Xi_inv))
+  M <- Xi %*% crossprod(Y, W)
   df <- 2 + n - p + 1
+  scale <- crossprod(W) + diag(p) - crossprod(M, Xi_inv) %*% M
   sim_Sigma <- rInvWishart(1, df, scale)[,,1]
   sim_gamma <- matrnorm(M, Xi, sim_Sigma)
   return(list(Sigma = sim_Sigma, gamma = sim_gamma))
@@ -157,22 +157,24 @@ update_sigma_gamma <- function(p, Y, Psi, W) {
 # MCMC sample of R (correlation matrix) and B (probit parameters)
 update_RB <- function(Sigma, gamma) {
   if(is.matrix(Sigma)){
-    D_inv = diag(1/sqrt(diag(Sigma)))
+    D <- sqrt(diag(Sigma))
+    D_inv <- diag(1/D)
   } else {
-    D_inv = 1/sqrt(Sigma)
+    D <- sqrt(Sigma)
+    D_inv <- 1/D
   }
-  return(list(R = R, B = B, D = solve(D_inv)))
   # D_inv <- chol2inv(PD_chol(D))
   R <- D_inv %*% Sigma %*% D_inv
   B <- gamma %*% D_inv
+  return(list(R = R, B = B, D = D))
 }
 
 # MCMC sample of \eqn{\Psi} from \cite{Talhouk, A., Doucet, A., & Murphy, K. (2012). Efficient Bayesian inference for multivariate probit models with sparse inverse correlation matrices. Journal of Computational and Graphical Statistics, 21(3), 739-757.}
 #' @importFrom CholWishart "rInvWishart"
-  Sigma = S + B %*% chol2inv(PD_chol(R)) %*% t(B)
 update_Psi <- function(nu, S, B, R) {
   r <- nrow(B)
   df <- nu + r
+  Sigma <- S + B %*% tcrossprod(chol2inv(PD_chol(R)), B)
   return(rInvWishart(1, df, Sigma)[,,1])
 }
 
@@ -208,26 +210,26 @@ update_Psi <- function(nu, S, B, R) {
 # }
 
 update_y_miss_reg <- function(x, y_hat, m, z, B, R, omega, include_x = TRUE) {
-  X = if(include_x) cbind(rep(1,nrow(x)), x) else matrix(1, nrow = nrow(x), ncol = 1)
-  b = tcrossprod(omega, y_hat) + crossprod(t(By), tcrossprod(R_inv, (z - X %*% A))) #omega %*% t(y_hat) + By %*% solve(R) %*% t((z - X %*% A))
-  Q = omega + By %*% R_inv %*% t(By) #crossprod(t(By), crossprod(t(R_inv), By)) #By %*% R_inv %*% By
   missing_index <- which(m == 0)
   # n_miss <- length(missing_index)
   p <- ncol(y_hat)
   # q <- ncol(x)
   By <- B[c((nrow(B) - p + 1):nrow(B)),, drop=FALSE]
   A <- B[-c((nrow(B) - p + 1):nrow(B)),, drop=FALSE]
+  X <- if(include_x) cbind(1, x) else matrix(1, nrow = nrow(x), ncol = 1)
   R_inv <- chol2inv(PD_chol(R))
+  b <- tcrossprod(omega, y_hat) + By %*% tcrossprod(R_inv, (z - X %*% A)) #omega %*% t(y_hat) + By %*% solve(R) %*% t((z - X %*% A))
+  Q <- omega + By %*% tcrossprod(R_inv, By) #crossprod(t(By), crossprod(t(R_inv), By)) #By %*% R_inv %*% By
   # print(Q)
-  mu = t(b) %*% chol2inv(PD_chol(Q)) #if(p==1) t(b) %*% chol2inv(PD_chol(Q)) else (chol2inv(PD_chol(Q)) %*% t(b))
+  mu <- crossprod(b, chol2inv(PD_chol(Q))) #if(p==1) t(b) %*% chol2inv(PD_chol(Q)) else (chol2inv(PD_chol(Q)) %*% t(b))
   # print((mu))
-  #   b = y_hat[miss_i,] %*% omega + By %*% chol2inv(PD_chol(R)) %*% (z[miss_i,] - t(A) %*% X1)
   y_miss <- multi_rMVN(mean_mat = mu, precision = Q)[missing_index]
 
   # y_miss <- matrix(ncol = p, nrow = n_miss)
   # for(i in seq_len(n_miss)) {
   #   miss_i <- missing_index[i]
   #   X1 <- if(include_x) matrix(c(1, x[miss_i,]), ncol=1) else matrix(1)
+  #   b <- y_hat[miss_i,] %*% omega + By %*% chol2inv(PD_chol(R)) %*% (z[miss_i,] - crossprod(A, X1)
   #   Q <- omega + By %*% chol2inv(PD_chol(R)) %*% By
   #   y_miss[i,] <- rMVNc(b = b, Q = Q)
   # }
@@ -336,34 +338,34 @@ update_y_miss_BART <- function(x, y, z, z_hat, y_hat, n_trees, R, Omega, missing
 #   vec2 <- solve(mat, vec)
 #   A <- crossprod(crossprod(mat, vec2), vec2)
 #
-#     det_omega = omega
 #   if(p == 1) {
+#     log_det_omega <- log(omega)
 #   } else {
-#     det_omega = det(omega)
+#     log_det_omega <- determinant(omega, logarithm=TRUE)$modulus
 #   }
 #
-#   return((n + alpha - p - 1)/2 * log(det_omega) - 0.5*(B + C - A))
 #   B <- sum(diag(Vinv %*% omega))
+#   return(0.5 * ((n + alpha - p - 1) * log_det_omega - B - C + A)))
 # }
 # log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
-#   C = sum(rowSums((node_partial_res %*% t(omega)) * node_partial_res))
 #   n <- nrow(node_partial_res)
 #   p <- ncol(node_partial_res)
 #   # C <- sum(apply(node_partial_res, 1, function(x) crossprod(crossprod(omega, x), x)))
+#   C <- sum(tcrossprod(node_partial_res, omega) * node_partial_res)
 #
 #   vec <- omega %*% colSums(node_partial_res) + kappa * mu0
 #   mat <- n * omega + diag(kappa, p)
 #   vec2 <- solve(mat, vec)
 #   A <- crossprod(vec2, vec)
 #
-#   if(p==1){
-#     det_omega = omega
-#     det_mat = mat
+#   if(p == 1) {
+#     log_det_omega <- log(omega)
+#     log_det_mat <- log(mat)
 #   } else {
-#     det_omega = det(omega)
-#     det_mat = det(mat)
+#     log_det_omega <- determinant(omega, logarithm=TRUE)$modulus
+#     log_det_mat <- determinant(mat, logarithm=TRUE)$modulus
 #   }
-#   return(n*det_omega/2 + 0.5*kappa^p - 0.5 * det_mat - 0.5*(C - A))
+#   return(0.5 * (n * log_det_omega + kappa^p - log_det_mat - C + A))
 # }
 
 log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
@@ -373,21 +375,25 @@ log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, a
   Sigma_mu_inv <- n * omega + diag(kappa, p)
   Sigma_mu <- chol2inv(chol(Sigma_mu_inv))
 
-  mu_mu = Sigma_mu %*% (omega %*% colSums(node_partial_res) + diag(kappa, p) %*% mu0)
+  mu_mu <- Sigma_mu %*% (omega %*% colSums(node_partial_res) + kappa * mu0)
 
-  A = crossprod(crossprod(diag(kappa, p), mu0), mu0) #t(mu0) %*% diag(kappa, p) %*% mu0
-  B = crossprod(crossprod(Sigma_mu_inv, mu_mu), mu_mu) #t(mu_mu) %*% Sigma_mu_inv %*% mu_mu
-  C = sum(rowSums((node_partial_res %*% t(omega)) * node_partial_res)) #sum(apply(node_partial_res, 1, function(x) t(x) %*% omega %*% x))
+  #A <- crossprod(crossprod(diag(kappa, p), mu0), mu0) #t(mu0) %*% diag(kappa, p) %*% mu0
+  A <- sum(kappa * mu0^2)
+  #B <- crossprod(crossprod(Sigma_mu_inv, mu_mu), mu_mu) #t(mu_mu) %*% Sigma_mu_inv %*% mu_mu
+  B <- sum(crossprod(Sigma_mu_inv, mu_mu^2))
+  #C <- sum(rowSums((node_partial_res %*% t(omega)) * node_partial_res)) #sum(apply(node_partial_res, 1, function(x) t(x) %*% omega %*% x))
+  C <- sum(tcrossprod(node_partial_res, omega) * node_partial_res)
 
-  if(p==1){
-    det_omega = omega
-    det_Sigma_mu = Sigma_mu
+  if(p == 1) {
+    log_det_omega <- log(omega)
+    log_det_Sigma_mu <- log(Sigma_mu)
   } else {
-    det_omega = det(omega)
-    det_Sigma_mu = det(Sigma_mu)
+    log_det_omega <- determinant(omega, logarithm=TRUE)$modulus
+    log_det_Sigma_mu <- determinant(Sigma_mu, logarithm=TRUE)$modulus
   }
   # -(n*p/2)*log(2*pi) + p/2 * log(kappa) +
-  loglik = p/2 * log(kappa) + n/2 * log(det_omega) + log(det_Sigma_mu)/2 - 0.5*(A - B + C)
+  #loglik <- p/2 * log(kappa) + n/2 * log_det_omega + log_det_Sigma_mu/2 - 0.5 * (A - B + C)
+  loglik <- 0.5 * (p * log(kappa) + n * log_det_omega + log_det_Sigma_mu - A + B - C)
   return(loglik)
 }
 
@@ -435,8 +441,6 @@ scale_bart <- function(data, min = NULL, max = NULL) {
   return(scaled_val)
 }
 
-      param_mat_list[[i]] = cbind(matrix(rep(x[i,], grid_len), ncol = q, byrow = TRUE), y_grid)
-      if(intercept) param_mat_list[[i]] = cbind(rep(1, grid_len), param_mat_list[[i]])
 pdp_param_mat_list <- function(x, y_range = c(-0.5, 0.5), grid_len = 20, intercept = FALSE, include_x = TRUE, n) { # Returns a list of size n (n pdp lines)
   y_grid <- seq(y_range[1], y_range[2], length = grid_len)
   if(include_x) {
@@ -444,14 +448,16 @@ pdp_param_mat_list <- function(x, y_range = c(-0.5, 0.5), grid_len = 20, interce
     q <- ncol(x)
     param_mat_list <- vector(mode = "list", length = n)
     for(i in seq_len(n)) {
+      param_mat_list[[i]] <- cbind(matrix(rep(x[i,], grid_len), ncol = q, byrow = TRUE), y_grid)
+      if(intercept) param_mat_list[[i]] <- cbind(1, param_mat_list[[i]])
     }
   } else {
     if(missing(n)) {
       warning("Need to provide length of data")
       break
     }
-    if(intercept) param_mat_list = cbind(rep(1, grid_len), param_mat_list[[i]])
     param_mat_list <- matrix(y_grid, ncol=1)
+    if(intercept) param_mat_list <- cbind(1, param_mat_list[[i]])
   }
   return(param_mat_list)
 }
