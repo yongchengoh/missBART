@@ -23,8 +23,9 @@
 #' # data <- sim_data_friedman(n = 100, p = 2)
 #' # bart_out <- mvBART(data$x, data$y, n_trees = 90, burn = 500,
 #' #                    iters = 1000, thin = 2, predict = FALSE)
-mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 1000, thin = 2, predict = TRUE, tree_prior_params = tree_list(...), hypers = hypers_list(...),
-                  scale = TRUE, show_progress = TRUE, progress_every = 10, true_trees_data = NA, ...) {
+mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 1000, thin = 2,
+                   predict = TRUE, tree_prior_params = tree_list(...), hypers = hypers_list(...),
+                   scale = TRUE, show_progress = TRUE, progress_every = 10, true_trees_data = NA, ...) {
 
   if(is.null(x_predict)) predict <- FALSE
   y <- as.matrix(y)

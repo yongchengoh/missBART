@@ -6,7 +6,7 @@ devtools::load_all()
 set.seed(10000)
 n <- 500
 data <- sim_data_trees(n, 1, 1, ome = diag(0.5, 1)) #mlbench::mlbench.friedman1(n, sd = 5)
-y <- y_original = matrix(data$y, ncol = 1)
+y <- y_original <- matrix(data$y, ncol = 1)
 x <- data$x
 true_sd <- 1/sqrt(data$ome)
 true_sd

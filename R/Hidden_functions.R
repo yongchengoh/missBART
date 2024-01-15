@@ -93,11 +93,15 @@ update_z <- function(Y, m, B, R) {
   p <- ncol(m)
   mu <- Y %*% B
   # U <- diag(n)
-  z <- matrix(nrow = n, ncol = p)
   if(p == 1) {
-    z[m == 0] <- extraDistr::rtnorm(sum(m == 0), mean = mu[m == 0], sd = 1, a = -Inf, b = 0)
-    z[m == 1] <- extraDistr::rtnorm(sum(m == 1), mean = mu[m == 1], sd = 1, a = 0, b = Inf)
+    # z <- matrix(nrow = n, ncol = p)
+    # z[m == 0] <- extraDistr::rtnorm(sum(m == 0), mean = mu[m == 0], sd = 1, a = -Inf, b = 0)
+    # z[m == 1] <- extraDistr::rtnorm(sum(m == 1), mean = mu[m == 1], sd = 1, a = 0, b = Inf)
+    z <- extraDistr::rtnorm(n, mean = mu, sd = 1,
+                            a = ifelse(m == 0, -Inf, 0),
+                            b = ifelse(m == 0, 0, Inf))
   } else {
+    z <- matrix(nrow = n, ncol = p)
     m_lower <- matrix(0, nrow = n, ncol = p)
     m_lower[m == 0] <- -Inf
     m_upper <- matrix(0, nrow = n, ncol = p)

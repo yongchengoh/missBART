@@ -42,9 +42,9 @@ ome <- matrix(c(1.7, 0.377, 0.377, 0.62), ncol=2)
 kappa <- 16 * trees
 true_trees <- vector(mode = "list", length = trees)
 for(i in seq_len(trees)) {
-  df1 <- data.frame(matrix(ncol = 7, nrow = 1))
-  colnames(df1) <- c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
-  df1[1,] <- c(0,0,1,0,1,0,0)
+  df1 <- data.frame(matrix(ncol = 8, nrow = 1))
+  colnames(df1) <- c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction", "NA_direction")
+  df1[1,] <- c(0,0,1,0,1,0,0,NA)
   n_splits <- sample(seq_len(8), 1)
   mu <- multi_rMVN(matrix(0, ncol=p, nrow = n_splits + 1), diag(kappa, p)) 
 
@@ -70,9 +70,9 @@ include_y <- TRUE
 r <- 1
 if(include_x && !include_y) {
   r <- 1 + q
-} else if (!include_x && include_y) {
+} else if(!include_x && include_y) {
   r <- 1 + p
-} else if (include_x && include_y) {
+} else if(include_x && include_y) {
   r <- 1 + p + q
 }
 corR <- diag(p)
@@ -83,9 +83,9 @@ for(seed in sample(seq(1000, 100000), size = 10000)) {
   B <- matrnorm(matrix(0, nrow=r, ncol=p), Psi_1, corR)
   if(include_x && !include_y) {
     phi <- cbind(1, x) %*% B
-  } else if (!include_x && include_y) {
+  } else if(!include_x && include_y) {
     phi <- cbind(1, y) %*% B
-  } else if (include_x && include_y) {
+  } else if(include_x && include_y) {
     phi <- cbind(1, x, y) %*% B
   } else {
     phi <- matrix(B, nrow = n, ncol = p, byrow = TRUE)

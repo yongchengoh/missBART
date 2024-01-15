@@ -33,16 +33,17 @@ propose_tree(
 \item{cat_list}{list of used categorical subset}
 }
 \value{
-A dataframe containing details of a new tree structure
+A data.frame containing details of a new tree structure
 }
 \description{
 A function for proposing an updated tree structure
 }
 \examples{
 # Create a data.frame representing the root node of a tree
-df <- data.frame(matrix(ncol = 7, nrow = 1))
-colnames(df) <- c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
-df[1,] <- c(0,0,1,0,1,0,0)
+df <- data.frame(matrix(ncol = 8, nrow = 1))
+colnames(df) <- c("parent", "lower", "upper", "split_variable",
+                  "split_value", "depth", "direction", "NA_direction")
+df[1,] <- c(0,0,1,0,1,0,0, NA)
 x <- matrix(stats::runif(9), ncol=3)
 propose_tree(df, x, min_node = 1, max_attempt = 1, i = 1)
 }

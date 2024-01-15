@@ -9,14 +9,15 @@
 #' @param miss_row index of missing rows
 #' @param cat_list list of used categorical subset
 #'
-#' @return A dataframe containing details of a new tree structure
+#' @return A data.frame containing details of a new tree structure
 #' @export
 #'
 #' @examples
 #' # Create a data.frame representing the root node of a tree
-#' df <- data.frame(matrix(ncol = 7, nrow = 1))
-#' colnames(df) <- c("parent", "lower", "upper", "split_variable", "split_value", "depth", "direction")
-#' df[1,] <- c(0,0,1,0,1,0,0)
+#' df <- data.frame(matrix(ncol = 8, nrow = 1))
+#' colnames(df) <- c("parent", "lower", "upper", "split_variable",
+#'                   "split_value", "depth", "direction", "NA_direction")
+#' df[1,] <- c(0,0,1,0,1,0,0, NA)
 #' x <- matrix(stats::runif(9), ncol=3)
 #' propose_tree(df, x, min_node = 1, max_attempt = 1, i = 1)
 propose_tree <- function(df, x, min_node, max_attempt = 10, i, probit = FALSE, miss_row = NA, cat_list = NA) {
@@ -40,8 +41,8 @@ propose_tree <- function(df, x, min_node, max_attempt = 10, i, probit = FALSE, m
     #-If tree is not a stump, we can randomly choose to grow or prune the tree
     MOVE <- sample(c("GROW", "PRUNE"), 1)
   } else {
-    MOVE = sample(c("GROW", "PRUNE", "CHANGE"), 1)
     # MOVE <- sample(c("GROW", "PRUNE", "CHANGE", "SWAP"), 1)
+    MOVE <- sample(c("GROW", "PRUNE", "CHANGE"), 1, prob=c(2.5, 2.5, 4)/9)
   } # End grow/prune/change/swap
 
   decent_tree <- FALSE
