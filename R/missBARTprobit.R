@@ -42,6 +42,17 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
   y <- as.matrix(y)
   x <- as.matrix(x)
 
+  min_y <- apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
+  max_y <- apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
+  min_x <- apply(x, 2, min, na.rm = TRUE)
+  max_x <- apply(x, 2, max, na.rm = TRUE)
+  if(scale){
+    y <- t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y - min_y))) - 0.5
+    if(nrow(y) == 1) y <- t(y)
+    x <- apply(x, 2, scale)
+    if(predict) x_predict <- apply(x_predict, 2, scale)
+  }
+
   for(l in 1:ncol(x)) {
     if(any(is.na(x[,l]))) {
       x <- cbind(x, 1 - as.integer(is.na(x[,l])))
@@ -50,13 +61,6 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
         colnames(x_predict) <- colnames(x)
       }
     }
-  }
-
-  min_y <- apply(y, 2, min, na.rm = TRUE) #min(y, na.rm = TRUE)
-  max_y <- apply(y, 2, max, na.rm = TRUE) #max(y, na.rm = TRUE)
-  if(scale){
-    y <- t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y - min_y))) - 0.5
-    if(nrow(y) == 1) y <- t(y)
   }
 
   #####-------------------- GET PARAMETERS --------------------#####
@@ -162,7 +166,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
 
   new_B <- matrix(0, ncol=p, nrow=r) #matrix(rnorm(r*p, mean = 0, sd = 1/sqrt(tau_b)), ncol = p)
   new_R <- D <- diag(p)
-  Psi <- rInvWishart(1, r + 1, diag(r))[,,1]
+  Psi <- diag(100, r) #rInvWishart(1, r + 1, diag(r))[,,1]
 
   z <- matrix(rep(1, n * p), nrow=n, ncol=p)
   z[missing_index] <- -1
@@ -287,7 +291,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
     z <- update_z(Y, m, new_B, new_R)
     if(p == 1) {
       new_R <- diag(p)
-      new_B <- update_B(y, z, Y, tau_b = 0.01)
+      new_B <- update_B(y, z, Y, tau_b = 100)
     } else {
       W <- update_W(R = new_R, z = z)
       Sigma_gamma <- update_sigma_gamma(p, Y, Psi, W)
@@ -313,6 +317,8 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
       if(scale) {
         y_post <- append(y_post, list(unscale(y_hat, min_y, max_y)))
         y_impute <- append(y_impute, list(unscale(y, min_y, max_y)[missing_index]))
+        pred <- multi_rMVN(y_hat, new_omega)
+        y_pred <- append(y_pred, list(unscale(pred, min_y, max_y)))
         if(p == 1) {
           omega_post <- append(omega_post, list(1/(new_omega/(max_y - min_y)^2)))  # returns the residual variance on the original scale
         } else {
@@ -333,9 +339,6 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
       B_post <- append(B_post, list(new_B))
       if(predict) new_y_post <- append(new_y_post, list(unscale(new_predictions, min_y, max_y)))
       z_post <- append(z_post, list(z))
-      # pred <- multi_rMVN(y_hat, new_omega)
-      # pred[missing_index] <- y[missing_index]
-      # y_pred <- append(y_pred, list(pred))
     }
 
     if(p == 1 && make_pdp){
