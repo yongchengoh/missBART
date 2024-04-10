@@ -121,19 +121,15 @@ update_z <- function(Y, m, B, R) {
 update_B <- function(y, z, Y, tau_b){
   r <- ncol(Y)
   p <- ncol(y)
-  V <- diag(p)
-  U <- chol2inv(chol(diag(tau_b, r) + crossprod(Y)))
-  M <- t(crossprod(z, Y) %*% U)
-  return(matrnorm(M, U, V))
-  # b <- colSums(sweep(Y, 1, z, "*"))
-  # y_sum <- matrix(0, ncol = r, nrow = r)
-  # for(i in 1:nrow(y)) {
-  #   y_sum <- y_sum + tcrossprod(Y[i,])
-  # }
-  # Q <- diag(tau_b, r) + y_sum
-  # mean <- solve(Q, b)
-  # return(matrix(rMVN(mu = mean, Q = Q), ncol = 1))
-  # return(matrix(rMVNc(b = b, Q = Q), ncol = 1))
+  # V <- diag(p)
+  # U <- chol2inv(chol(diag(tau_b, r) + crossprod(Y)))
+  # M <- t(crossprod(z, Y) %*% U)
+  b <- colSums(sweep(Y, 1, z, "*"))
+  y_sum <- crossprod(Y)
+  Q <- diag(tau_b, r) + y_sum
+  return(matrix(rMVNc(b = b, Q = Q), ncol = 1))
+  # return(matrnorm(M, U, V))
+
 }
 
 # MCMC sample of W, the latent variable in probit regression introduced by \cite{Talhouk, A., Doucet, A., & Murphy, K. (2012). Efficient Bayesian inference for multivariate probit models with sparse inverse correlation matrices. Journal of Computational and Graphical Statistics, 21(3), 739-757.}
