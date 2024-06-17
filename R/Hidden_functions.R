@@ -399,7 +399,7 @@ log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, a
   }
   # -(n*p/2)*log(2*pi) + p/2 * log(kappa) +
   #loglik <- p/2 * log(kappa) + n/2 * log_det_omega + log_det_Sigma_mu/2 - 0.5 * (A - B + C)
-  loglik <- 0.5 * (p * log(kappa) + n * log_det_omega + log_det_Sigma_mu - A + B - C)
+  loglik <- 0.5 * (- n * p * log(2*pi) + p * log(kappa) + n * log_det_omega + log_det_Sigma_mu - A + B - C)
   return(loglik)
 }
 
@@ -468,7 +468,7 @@ pdp_param_mat_list <- function(x, y_range = c(-0.5, 0.5), grid_len = 20, interce
 }
 
 #' @importFrom ggplot2 "ggplot" "aes" "geom_point" "geom_errorbar" "labs" "theme_bw" "coord_flip"
-plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c()) {
+plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c(), colours = NULL, plot_title = NULL) {
   if(missing(actual)) {
     actual <- Reduce("+", post_list)/length(post_list)
   }
@@ -483,24 +483,42 @@ plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c
   }
   data <- data.frame("actual" = as.vector(actual), "predicted" = predicted, "lower" = perc[1,], "upper" = perc[2,])
   data$group <- rep(1:nrow(actual), ncol(actual)) #rep(seq(1:(nrow(data)/2)), 2)
+  data$missing_var <- sort(data$group)
   if(is.null(row_names)) {
     for(j in 1:ncol(actual)) {
       for(i in 1:nrow(actual)) {
-        row_names <- c(row_names, paste("b", i, j, sep = ""))
+        row_names <- c(row_names, paste("B", i, j, sep = ""))
       }
     }
   }
-  data$row.names <- factor(row_names, levels = row_names)
+  data$row.names <- as.factor(row_names) #factor(row_names, levels = row_names)
+  facet_labels = c("Missing SLA", "Missing Aarea", "Missing Narea", "Missing Parea", "Missing Gs")
+  names(facet_labels) = c('1', '2', '3', '4', '5')
 
   p <- ggplot(data, aes(x = factor(row.names))) +
-    geom_point(aes(y = actual), col="black", size=1.3) +
+    geom_hline(yintercept = 0, size=0.5) +
+    # geom_point(aes(y = actual), col="black", size=1) +
     # geom_crossbar(aes(ymin = lower, ymax = upper, colour=as.factor(group)), width = 0.2) +
     geom_errorbar(aes(ymin = lower, ymax = upper, colour=as.factor(group)), width=0.5) +
     labs(x = "Parameters",
          y = "Values") +
     # scale_color_brewer(palette="RdYlGn") +
+    facet_wrap(missing_var ~ ., labeller = as_labeller(facet_labels), scales = "free", nrow = 1) +
     theme_bw() +
-    coord_flip()
+    theme(legend.position = "none",
+          plot.title = element_text(size = 20),
+          axis.title.x = element_text(size = 18),
+          axis.title.y = element_text(size = 18),
+          axis.text = element_text(size = 18),
+          strip.text = element_text(size=25)) +
+    guides(x =  guide_axis(angle = 90))
+    # coord_flip()
+  if(!is.null(colours)){
+    p <- p + scale_color_manual(name = "", labels = col_names, values = colours)
+  }
+  if(!is.null(plot_title)){
+    p <- p + ggtitle(plot_title)
+  }
   print(p)
   invisible(p)
 }
