@@ -22,7 +22,6 @@
 #' @param mice_impute logical indicating whether to impute missing values via mice prior to prior calibration
 #' @param true_trees_data true trees for BART component
 #' @param true_trees_missing true trees for probit BART component
-#' @param z_true true latent variable for probit BART component
 #' @param true_change_points true change points for BART trees
 #' @param true_change_points_miss true change points for probit BART trees
 #' @param ... Catches unused arguments
@@ -41,7 +40,7 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
                       predict = TRUE, MH_sd = 0.5, tree_prior_params = tree_list(...), hypers = hypers_list(...),
                       scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10,
                       pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = TRUE, true_trees_data = NA,
-                      true_trees_missing = NA, z_true, true_change_points = NA, true_change_points_miss = NA, ...) {
+                      true_trees_missing = NA, true_change_points = NA, true_change_points_miss = NA, ...) {
 
   if(is.null(x_predict)) predict <- FALSE
   y <- as.matrix(y)
@@ -80,17 +79,9 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   m <- matrix(1, nrow=n, ncol=p)
   m[is.na(y)] <- 0
 
-  #####-------------------- FIRST IMPUTATION OF DATA --------------------#####
-  if(mice_impute) {
-    imputed <- as.matrix(mice::complete(mice::mice(cbind(y, x), print = FALSE))[,seq_len(p)])
-    y[missing_index] <- imputed[missing_index]
-  } else {
-    y[missing_index] <- 0
-  }
-
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 <- rep(hypers$mu0, p)
-  kappa_reg <- ifelse(is.null(hypers$kappa), 4 * (stats::qnorm(0.9))^2 * n_reg_trees, hypers$kappa)
+  kappa_reg <- ifelse(is.null(hypers$kappa), 4 * (stats::qnorm(0.975))^2 * n_reg_trees, hypers$kappa)
   nu <- hypers$df
   qchi <- stats::qchisq(1 - hypers$q, nu)
   sigest <- rep(0, p)
@@ -101,11 +92,11 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   # print(paste("nu =", nu))
   # print(paste("lambda =", lambda))
   if(p == 1) {
-    print(paste("sd_ols", (sigest * (max_y - min_y))^2))
-    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
+    print(paste("sd_ols", (sigest * (max_y - min_y))))
+    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))))
   } else {
-    print(paste("sd_ols", (sigest * (max_y - min_y))^2))
-    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
+    print(paste("sd_ols", (sigest * (max_y - min_y))))
+    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))))
 
     alpha <- ifelse(is.null(hypers$alpha), nu, hypers$alpha)
     if(is.null(hypers$V)) {
@@ -119,6 +110,15 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   # for(j in seq_len(p)) {
   #   curve(dgamma(x, shape = nu/2, rate = nu * lambda[j]/2), from = 0, to = 100)
   # }
+
+  #####-------------------- FIRST IMPUTATION OF DATA --------------------#####
+  if(mice_impute) {
+    imputed <- as.matrix(mice::complete(mice::mice(cbind(y, x), print = FALSE))[,seq_len(p)])
+    y[missing_index] <- imputed[missing_index]
+  } else {
+    y[missing_index] <- 0
+  }
+  # y[missing_index] <- y_train_scale[missing_index]
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha <- tree_prior_params$prior_alpha
@@ -137,7 +137,7 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   reg_prior <- lapply(vector(mode = "list", length = n_reg_trees), as.list) # tree prior for accepted trees
   reg_likely <- lapply(vector(mode = "list", length = n_reg_trees), as.list) # likelihood for accepted trees
   reg_accept <- lapply(vector(mode = "list", length = n_reg_trees), as.list) # accept/reject status for all trees: reg_accept[[j]][[i]]
-  reg_moves <- NULL
+  # reg_moves <- NULL
 
   #####-------------------- CREATE STORAGE FOR PROBIT BART --------------------#####
   R_post <- vector(mode = "list", length = 0)
@@ -185,7 +185,7 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   accepted_class_trees <- lapply(seq_len(n_class_trees), function(x) accepted_class_trees[[x]] = df)
   class_change_id <- lapply(seq_len(n_class_trees), function(x) class_change_id[[x]] = rep(1, n))
 
-  kappa_class <- (4/9) * (n_class_trees)
+  kappa_class <- 4/9*(n_class_trees)
 
   class_mu[[1]] <- sapply(seq_len(n_class_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = diag(kappa_class, p))))
   class_phi <- lapply(seq_len(n_class_trees), function(x) rep(class_mu[[1]][[x]], n))
@@ -254,7 +254,7 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
       change_points <- new_tree$change_points # Get change points for new tree
       decent_tree <- new_tree$decent_tree
       # new_df <- true_trees_data[[j]]
-      # change_points <- true_change_points[,j] #get_change_points(new_df, x)
+      # change_points <- get_change_points(new_df, x) #true_change_points[,j]
       # decent_tree <- TRUE
       # accept <- TRUE
 
@@ -326,7 +326,7 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
       change_points <- new_tree$change_points # Get change points for new tree
       decent_tree <- new_tree$decent_tree
       # new_df <- true_trees_missing[[k]]
-      # change_points <- true_change_points_miss #get_change_points(new_df, Y)
+      # change_points <- get_change_points(new_df, Y) #true_change_points_miss
       # decent_tree <- TRUE
       # accept <- TRUE
 
@@ -344,7 +344,6 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
         class_change_id[[k]] <- change_points
         class_prior[[k]] <- p2
         class_likely[[k]] <- l2
-        # print(new_df)
       }
 
       ###----- Tree node updates -----###

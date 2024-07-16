@@ -12,8 +12,8 @@
 #' @export
 #'
 #' @examples hypers_list(mu0 = 5, kappa = 2, alpha = 1, V = 2)
-hypers_list <- function(mu0 = 0, kappa = NULL, alpha = NULL, V = NULL, df = 10, q = 0.75, ...) {
-  return(list(mu0 = mu0, kappa = kappa, alpha = alpha, V = V, df = df, q = q))
+hypers_list <- function(mu0 = 0, kappa = NULL, alpha = NULL, V = NULL, df = 10, q = 0.75, tau_b = 100, ...) {
+  return(list(mu0 = mu0, kappa = kappa, alpha = alpha, V = V, df = df, q = q, tau_b = tau_b))
 }
 
 #' Tree prior parameters

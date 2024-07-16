@@ -35,7 +35,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
                            predict = TRUE, tree_prior_params = tree_list(...), hypers = hypers_list(...),
                            scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE,
                            progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = TRUE,
-                           true_trees_data = NA, true_change_points = NA, ...) {
+                           true_trees_data = NA, true_change_points = NA,...) {
 
 
   if(is.null(x_predict)) predict <- FALSE
@@ -49,8 +49,9 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
   if(scale){
     y <- t(apply(sweep(y, 2, min_y), 1, function(x) x/(max_y - min_y))) - 0.5
     if(nrow(y) == 1) y <- t(y)
-    x <- apply(x, 2, scale)
-    if(predict) x_predict <- apply(x_predict, 2, scale)
+    x <- t(apply(sweep(x, 2, min_x), 1, function(X) X/(max_x - min_x))) - 0.5
+    if(predict) x_predict <- t(apply(sweep(x_predict, 2, min_x), 1, function(X) X/(max_x - min_x))) - 0.5
+    # x <- apply(x, 2, scale)
   }
 
   for(l in 1:ncol(x)) {
@@ -77,17 +78,9 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
   m <- matrix(1, nrow=n, ncol=p)
   m[is.na(y)] <- 0
 
-  #####-------------------- FIRST IMPUTATION OF DATA --------------------#####
-  if(mice_impute) {
-    imputed <- as.matrix(mice::complete(mice::mice(cbind(y, x), print = FALSE))[,seq_len(p)])
-    y[missing_index] <- imputed[missing_index]
-  } else {
-    y[missing_index] <- 0
-  }
-
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 <- rep(hypers$mu0, p)
-  kappa <- ifelse(is.null(hypers$kappa), 4 * (stats::qnorm(0.9))^2 * n_trees, hypers$kappa)
+  kappa <- ifelse(is.null(hypers$kappa), 4 * (stats::qnorm(0.975))^2 * n_trees, hypers$kappa)
 
   nu <- hypers$df
   qchi <- stats::qchisq(1 - hypers$q, nu)
@@ -114,9 +107,19 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
       Vinv <- solve(V)
     }
   }
+
   # for(j in seq_len(p)) {
   #   curve(dgamma(x, shape = nu/2, rate = nu * lambda[j]/2), from = 0, to = 100)
   # }
+
+  #####-------------------- FIRST IMPUTATION OF DATA --------------------#####
+  if(mice_impute) {
+    imputed <- as.matrix(mice::complete(mice::mice(cbind(y, x), print = FALSE))[,seq_len(p)])
+    y[missing_index] <- imputed[missing_index]
+  } else {
+    y[missing_index] <- 0
+  }
+  # y[missing_index] <- y_train_scale[missing_index]
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha <- tree_prior_params$prior_alpha
@@ -166,11 +169,19 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
 
   new_B <- matrix(0, ncol=p, nrow=r) #matrix(rnorm(r*p, mean = 0, sd = 1/sqrt(tau_b)), ncol = p)
   new_R <- D <- diag(p)
-  Psi <- diag(100, r) #rInvWishart(1, r + 1, diag(r))[,,1]
 
   z <- matrix(rep(1, n * p), nrow=n, ncol=p)
   z[missing_index] <- -1
   Y <- probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
+
+  if(is.null(hypers$tau_b)){
+    tau_b <- as.numeric((qnorm(0.95)/3)^2 * apply(Y, 2, crossprod))
+  } else {
+    tau_b <- hypers$tau_b
+  }
+  print(tau_b)
+
+  Psi <- diag(1/tau_b, r) #diag(r*100, r) #rInvWishart(1, r + 1, diag(r))[,,1]
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict) {
@@ -267,7 +278,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
     #--Get BART predictions
     y_hat <- Reduce("+", tree_phi)
 
-    #--Sample missing values
+    # #--Sample missing values
     if(include_y) {
       y_miss <- update_y_miss_reg(x = x, y_hat = y_hat, m = m, z = z, B = new_B, R = new_R, omega = new_omega, include_x = include_x)
       # y_miss <- true_y_miss[missing_index]
@@ -291,7 +302,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
     z <- update_z(Y, m, new_B, new_R)
     if(p == 1) {
       new_R <- diag(p)
-      new_B <- update_B(y, z, Y, tau_b = 100)
+      new_B <- update_B(y, z, Y, tau_b = tau_b)
     } else {
       W <- update_W(R = new_R, z = z)
       Sigma_gamma <- update_sigma_gamma(p, Y, Psi, W)
@@ -303,7 +314,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
       D <- RB$D
 
       #--Sample Psi--#
-      Psi <- update_Psi(r + 1, diag(r), new_B, new_R)
+      # Psi <- update_Psi(r + 1, diag(r), new_B, new_R)
     }
 
     ###----- Out-of-Sample Predictions -----###
@@ -358,6 +369,6 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
               z_post = z_post,
               pdp_out = pdp_out,
               kappa = kappa,
-              new_omega_list = new_omega_list))
+              new_omega_list = new_omega_list, tau_b = tau_b))
 }
 

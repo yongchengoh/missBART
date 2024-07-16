@@ -58,7 +58,7 @@ mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 100
 
   #####-------------------- GET BART PRIOR PARAMETERS --------------------#####
   mu0 <- rep(hypers$mu0, p)
-  kappa <- 4 * (stats::qnorm(0.9))^2 * n_trees
+  kappa <- 4 * (stats::qnorm(0.975))^2 * n_trees
 
   nu <- hypers$df
   qchi <- stats::qchisq(1 - hypers$q, nu)
@@ -234,13 +234,29 @@ mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 100
     }
 
     ###----- Store posterior samples after burn-in, accounting for thinning -----###
-    if(i > burn && i %% thin == 0){
-      y_post <- append(y_post, list(y_hat))
-      omega_post <- append(omega_post, list(new_omega))
-      if(predict) new_y_post <- append(new_y_post, list(new_predictions))
-
-      pred <- multi_rMVN(y_hat, new_omega)
-      y_pred <- append(y_pred, list(pred))
+    if(i > burn && i%%thin == 0){
+      # y_post = append(y_post, list(y_hat))
+      # omega_post = append(omega_post, list(new_omega))
+      # if(predict) new_y_post = append(new_y_post, list(new_predictions))
+      # pred = multi_rMVN(y_hat, new_omega)
+      # y_pred = append(y_pred, list(pred))
+      if(scale){
+        y_post = append(y_post, list(unscale(y_hat, min_y, max_y)))
+        if(p==1){
+          omega_post = append(omega_post, list(1/(new_omega/(max_y - min_y)^2)))  # returns the residual variance on the original scale
+        } else {
+          omega_post = append(omega_post, list(diag(chol2inv(chol(new_omega)))*(max_y - min_y)^2)) # returns the residual covariance matrix on the original scale
+        }
+      } else {
+        y_post = append(y_post, list((y_hat)))
+        if(p==1){
+          omega_post = append(omega_post, list(1/(new_omega)))
+        } else {
+          omega_post = append(omega_post, list(chol2inv(chol(new_omega))))
+        }
+      }
+      # new_omega_list = append(new_omega_list, list(new_omega))
+      if(predict) new_y_post = append(new_y_post, list(unscale(new_predictions, min_y, max_y)))
     }
   } # End of i iterations
 
