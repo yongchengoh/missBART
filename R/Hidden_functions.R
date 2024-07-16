@@ -185,69 +185,19 @@ update_Psi <- function(nu, S, B, R) {
 }
 
 # MCMC sample of missing data
-# update_y_miss_reg <- function(x, y_hat, m, y, z, B, R, omega, include_x = TRUE, include_y = TRUE) {
-#   storage.mode(m) <- "logical"
-#   n <- nrow(y_hat)
-#   p <- ncol(y_hat)
-#   q <- ncol(x)
-#   if(include_x && !include_y) {
-#     A   <- B[2:(q+1),, drop=FALSE]
-#     B1  <- matrix(0, nrow=p, ncol=p)
-#   } else if(!include_x && include_y) {
-#     A   <- matrix(0, nrow=q, ncol=p)
-#     B1  <- B[-1,, drop=FALSE]
-#   } else if(include_x  && include_y) {
-#     A   <- B[2:(q+1),, drop=FALSE]
-#     B1  <- B[(q+2):(p+q+1),, drop=FALSE]
-#   } else {
-#     A   <- matrix(0, nrow=q, ncol=p)
-#     B1  <- matrix(0, nrow=p, ncol=p)
-#   }
-#   b1    <- t(B[1,, drop=FALSE])
-#   prec  <- omega + if(p == 1) tcrossprod(B1)/R else B1 %*% solve(R, t(B1))
-#   Q     <- if(p == 1) sqrt(prec) else PD_chol(prec)
-#   Oyhat <- tcrossprod(omega, y_hat)
-#   zXA   <- if(include_x) z - x %*% A else z
-#   BRinv <- B1 %*% chol2inv(PD_chol(R))
-#   b     <- Oyhat + tcrossprod(BRinv, sweep(zXA, 2, b1, FUN="-", check.margin=FALSE))
-#   Y     <- rMVNc(b, Q, is_chol=TRUE)
-#   Y     <- if(p == 1) matrix(Y, ncol=p) else t(Y)
-#   return(Y)
-# }
-
 update_y_miss_reg <- function(x, y_hat, m, z, B, R, omega, include_x = TRUE) {
   missing_index <- which(m == 0)
-  # n_miss <- length(missing_index)
   p <- ncol(y_hat)
-  # q <- ncol(x)
   By <- B[c((nrow(B) - p + 1):nrow(B)),, drop=FALSE]
   A <- B[-c((nrow(B) - p + 1):nrow(B)),, drop=FALSE]
   X <- if(include_x) cbind(1, x) else matrix(1, nrow = nrow(x), ncol = 1)
   R_inv <- chol2inv(PD_chol(R))
   b <- tcrossprod(omega, y_hat) + By %*% tcrossprod(R_inv, (z - X %*% A)) #omega %*% t(y_hat) + By %*% solve(R) %*% t((z - X %*% A))
   Q <- omega + By %*% tcrossprod(R_inv, By) #crossprod(t(By), crossprod(t(R_inv), By)) #By %*% R_inv %*% By
-  # print(Q)
-  mu <- crossprod(b, chol2inv(PD_chol(Q))) #if(p==1) t(b) %*% chol2inv(PD_chol(Q)) else (chol2inv(PD_chol(Q)) %*% t(b))
-  # print((mu))
+  mu <- crossprod(b, t(chol2inv(PD_chol(Q)))) #if(p==1) t(b) %*% chol2inv(PD_chol(Q)) else (chol2inv(PD_chol(Q)) %*% t(b))
   y_miss <- multi_rMVN(mean_mat = mu, precision = Q)[missing_index]
-
-  # y_miss <- matrix(ncol = p, nrow = n_miss)
-  # for(i in seq_len(n_miss)) {
-  #   miss_i <- missing_index[i]
-  #   X1 <- if(include_x) matrix(c(1, x[miss_i,]), ncol=1) else matrix(1)
-  #   b <- y_hat[miss_i,] %*% omega + By %*% chol2inv(PD_chol(R)) %*% (z[miss_i,] - crossprod(A, X1)
-  #   Q <- omega + By %*% chol2inv(PD_chol(R)) %*% By
-  #   y_miss[i,] <- rMVNc(b = b, Q = Q)
-  # }
   return(y_miss)
 }
-
-# update_y_miss_reg <- function(x, y_hat, m, y, z, B, R, omega, include_x = TRUE, include_y = TRUE) {
-#   prec <- omega + (B[2,])^2
-#   mu <- (y_hat %*% omega + (z - B[1,]) %*% B[2,])/as.vector(prec) #((y_hat - B[1,] * B[2,]) * as.vector(omega) + z * B[2,])/as.vector(prec)
-#   Y = matrix(rnorm(nrow(mu), mu, 1/sqrt(prec)), ncol=1)
-#   return(Y)
-# }
 
 # Get vector for sorting observations into terminal nodes
 get_change_points <- function(df, x) {
@@ -334,46 +284,6 @@ update_y_miss_BART <- function(x, y, z, z_hat, y_hat, n_trees, R, Omega, missing
 }
 
 # Computes the log marginal likelihood for accepting/rejecting BART trees
-# log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
-#   n <- nrow(node_partial_res)
-#   p <- ncol(node_partial_res)
-#   C <- sum(apply(node_partial_res, 1, function(x) crossprod(crossprod(omega, x), x)))
-#
-#   vec <- omega %*% colSums(node_partial_res) + kappa * mu0
-#   mat <- n * omega + diag(kappa, p)
-#   vec2 <- solve(mat, vec)
-#   A <- crossprod(crossprod(mat, vec2), vec2)
-#
-#   if(p == 1) {
-#     log_det_omega <- log(omega)
-#   } else {
-#     log_det_omega <- determinant(omega, logarithm=TRUE)$modulus
-#   }
-#
-#   B <- sum(diag(Vinv %*% omega))
-#   return(0.5 * ((n + alpha - p - 1) * log_det_omega - B - C + A)))
-# }
-# log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
-#   n <- nrow(node_partial_res)
-#   p <- ncol(node_partial_res)
-#   # C <- sum(apply(node_partial_res, 1, function(x) crossprod(crossprod(omega, x), x)))
-#   C <- sum(tcrossprod(node_partial_res, omega) * node_partial_res)
-#
-#   vec <- omega %*% colSums(node_partial_res) + kappa * mu0
-#   mat <- n * omega + diag(kappa, p)
-#   vec2 <- solve(mat, vec)
-#   A <- crossprod(vec2, vec)
-#
-#   if(p == 1) {
-#     log_det_omega <- log(omega)
-#     log_det_mat <- log(mat)
-#   } else {
-#     log_det_omega <- determinant(omega, logarithm=TRUE)$modulus
-#     log_det_mat <- determinant(mat, logarithm=TRUE)$modulus
-#   }
-#   return(0.5 * (n * log_det_omega + kappa^p - log_det_mat - C + A))
-# }
-
 log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, alpha) {
   n <- nrow(node_partial_res)
   p <- ncol(node_partial_res)
@@ -397,8 +307,6 @@ log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, a
     log_det_omega <- determinant(omega, logarithm=TRUE)$modulus
     log_det_Sigma_mu <- determinant(Sigma_mu, logarithm=TRUE)$modulus
   }
-  # -(n*p/2)*log(2*pi) + p/2 * log(kappa) +
-  #loglik <- p/2 * log(kappa) + n/2 * log_det_omega + log_det_Sigma_mu/2 - 0.5 * (A - B + C)
   loglik <- 0.5 * (- n * p * log(2*pi) + p * log(kappa) + n * log_det_omega + log_det_Sigma_mu - A + B - C)
   return(loglik)
 }
@@ -482,6 +390,62 @@ plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c
     predicted <- as.vector(Reduce("+", post_list)/length(post_list))
   }
   data <- data.frame("actual" = as.vector(actual), "predicted" = predicted, "lower" = perc[1,], "upper" = perc[2,])
+  data$group <- rep(1:ncol(actual), nrow(actual)) #rep(1:nrow(actual), ncol(actual))
+  data$missing_var <- sort(data$group)
+  if(is.null(row_names)) {
+    for(j in 1:ncol(actual)) {
+      for(i in 1:nrow(actual)) {
+        row_names <- c(row_names, paste("B", i, j, sep = ""))
+      }
+    }
+  }
+  data$row.names <- as.factor(row_names) #factor(row_names, levels = row_names)
+  # facet_labels = c("Missing SLA", "Missing Aarea", "Missing Narea", "Missing Parea", "Missing Gs")
+  # names(facet_labels) = c('1', '2', '3', '4', '5')
+
+  p <- ggplot(data, aes(x = factor(row.names))) +
+    geom_hline(yintercept = 0, linewidth=0.5) +
+    # geom_point(aes(y = actual), col="black", size=1) +
+    # geom_crossbar(aes(ymin = lower, ymax = upper, colour=as.factor(group)), width = 0.2) +
+    geom_errorbar(aes(ymin = lower, ymax = upper, colour=as.factor(row.names)), width=0.5) +
+    labs(x = "Parameters",
+         y = "Values") +
+    # scale_color_brewer(palette="RdYlGn") +
+    facet_wrap(missing_var ~ ., scales = "free", nrow = 1) +
+    theme_bw() +
+    theme(legend.position = "none",
+          plot.title = element_text(size = 20),
+          axis.title.x = element_text(size = 18),
+          axis.title.y = element_text(size = 18),
+          axis.text = element_text(size = 18),
+          strip.text = element_text(size=25)) +
+    guides(x =  guide_axis(angle = 90))
+    # coord_flip()
+  if(!is.null(colours)){
+    p <- p + scale_color_manual(name = "", labels = row_names, values = colours)
+  }
+  if(!is.null(plot_title)){
+    p <- p + ggtitle(plot_title)
+  }
+  print(p)
+  invisible(p)
+}
+
+#' @importFrom ggplot2 "ggplot" "aes" "geom_point" "geom_errorbar" "labs" "theme_bw" "coord_flip"
+plot_plant_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c(), colours = NULL, plot_title = NULL) {
+  if(missing(actual)) {
+    actual <- Reduce("+", post_list)/length(post_list)
+  }
+  if(isSymmetric(actual)) {
+    post <- Reduce(rbind, lapply(post_list, function(x) x[upper.tri(x, diag=TRUE)]))
+    perc <- apply(post, 2, stats::quantile, q)
+    predicted <- colMeans(post)
+    actual <- matrix(actual[upper.tri(actual, diag = TRUE)], nrow=1)
+  } else {
+    perc <- apply(Reduce(rbind, lapply(post_list, as.vector)), 2, stats::quantile, q)
+    predicted <- as.vector(Reduce("+", post_list)/length(post_list))
+  }
+  data <- data.frame("actual" = as.vector(actual), "predicted" = predicted, "lower" = perc[1,], "upper" = perc[2,])
   data$group <- rep(1:nrow(actual), ncol(actual)) #rep(seq(1:(nrow(data)/2)), 2)
   data$missing_var <- sort(data$group)
   if(is.null(row_names)) {
@@ -512,7 +476,7 @@ plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c
           axis.text = element_text(size = 18),
           strip.text = element_text(size=25)) +
     guides(x =  guide_axis(angle = 90))
-    # coord_flip()
+  # coord_flip()
   if(!is.null(colours)){
     p <- p + scale_color_manual(name = "", labels = col_names, values = colours)
   }
