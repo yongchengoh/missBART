@@ -31,21 +31,6 @@ sim_mu <- function(change_points, partial_res, kappa, omega) {
   return(matrix((sapply(split.data.frame(partial_res, change_points), sim_mu_node, kappa = kappa, omega = omega)), nrow = length(unique(change_points)), byrow = TRUE))
 }
 
-# sim_omega <- function(y, y_hat, alpha, Vinv) {
-#   n <- nrow(y)
-#   df <- alpha + n
-#   scale <- crossprod(y - y_hat) + Vinv
-#   scale <- chol2inv(PD_chol(scale))
-#   if(ncol(y) == 1) {
-#     a <- df/2
-#     b <- 0.5/scale
-#     omega <- stats::rgamma(1, a, b)
-#   } else {
-#     omega <- stats::rWishart(1, df, scale)[,,1]
-#   }
-#   return(omega)
-# }
-
 sim_omega <- function(y, y_hat, nu = NULL, lambda = NULL, alpha = NULL, Vinv = NULL) {
   n <- nrow(y)
   p <- ncol(y)
@@ -63,7 +48,7 @@ sim_omega <- function(y, y_hat, nu = NULL, lambda = NULL, alpha = NULL, Vinv = N
   return(omega)
 }
 
-sim_kappa <- function(mu, a, b) { #tree_mu[[i]]
+sim_kappa <- function(mu, a, b) {
   mu_mat <- Reduce(rbind, mu)
   p <- ncol(mu_mat)
   n_mu <- nrow(mu_mat)
@@ -177,11 +162,26 @@ update_RB <- function(Sigma, gamma) {
 
 # MCMC sample of \eqn{\Psi} from \cite{Talhouk, A., Doucet, A., & Murphy, K. (2012). Efficient Bayesian inference for multivariate probit models with sparse inverse correlation matrices. Journal of Computational and Graphical Statistics, 21(3), 739-757.}
 #' @importFrom CholWishart "rInvWishart"
-update_Psi <- function(nu, S, B, R) {
+update_Psi <- function(B, R, Psi0=NULL, Psi0_inv=NULL, a0=NULL, b0=NULL, ax=NULL, bx=NULL, ay=NULL, by=NULL){
+  p <- ncol(R)
   r <- nrow(B)
-  df <- nu + r
-  Sigma <- S + B %*% tcrossprod(chol2inv(PD_chol(R)), B)
-  return(rInvWishart(1, df, Sigma)[,,1])
+  q <- r - p - 1
+
+  A <- B %*% tcrossprod(chol2inv(PD_chol(R)), B) #%*% Psi0_inv
+
+  shape_int <- p/2 + a0
+  rate_int <- A[1,1]/2 + b0
+
+  shape_x <- p*(q)/2 + ax
+  rate_x <- sum(diag(A)[2:(1+q)])/2 + bx
+
+  shape_y <- p*(p)/2 + ay
+  rate_y <- sum(diag(A)[(2+q):r])/2 + by
+
+  tau_b <- c(rgamma(1, shape_int, rate_int), rgamma(q, shape_x, rate_x), rgamma(p, shape_y, rate_y))
+  Psi <- diag(1/tau_b)
+
+  return(list(tau_b = tau_b, Psi = Psi))
 }
 
 # MCMC sample of missing data
@@ -293,11 +293,8 @@ log_marginal_likelihood <- function(node_partial_res, kappa, omega, mu0, Vinv, a
 
   mu_mu <- Sigma_mu %*% (omega %*% colSums(node_partial_res) + kappa * mu0)
 
-  #A <- crossprod(crossprod(diag(kappa, p), mu0), mu0) #t(mu0) %*% diag(kappa, p) %*% mu0
   A <- sum(kappa * mu0^2)
-  #B <- crossprod(crossprod(Sigma_mu_inv, mu_mu), mu_mu) #t(mu_mu) %*% Sigma_mu_inv %*% mu_mu
   B <- sum(crossprod(Sigma_mu_inv, mu_mu^2))
-  #C <- sum(rowSums((node_partial_res %*% t(omega)) * node_partial_res)) #sum(apply(node_partial_res, 1, function(x) t(x) %*% omega %*% x))
   C <- sum(tcrossprod(node_partial_res, omega) * node_partial_res)
 
   if(p == 1) {
@@ -376,7 +373,7 @@ pdp_param_mat_list <- function(x, y_range = c(-0.5, 0.5), grid_len = 20, interce
 }
 
 #' @importFrom ggplot2 "ggplot" "aes" "geom_point" "geom_errorbar" "labs" "theme_bw" "coord_flip"
-plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c(), colours = NULL, plot_title = NULL) {
+plot_posterior <- function(post_list, actual, q = c(0.025, 0.975), row_names = c(), colours = NULL, plot_title = NULL, show_actual = FALSE) {
   if(missing(actual)) {
     actual <- Reduce("+", post_list)/length(post_list)
   }
@@ -390,8 +387,8 @@ plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c
     predicted <- as.vector(Reduce("+", post_list)/length(post_list))
   }
   data <- data.frame("actual" = as.vector(actual), "predicted" = predicted, "lower" = perc[1,], "upper" = perc[2,])
-  data$group <- rep(1:ncol(actual), nrow(actual)) #rep(1:nrow(actual), ncol(actual))
-  data$missing_var <- sort(data$group)
+  data$group <- rep(1:ncol(actual), each=nrow(actual)) #rep(1:nrow(actual), ncol(actual))
+  data$cov <- rep(1:nrow(actual), ncol(actual))
   if(is.null(row_names)) {
     for(j in 1:ncol(actual)) {
       for(i in 1:nrow(actual)) {
@@ -399,19 +396,19 @@ plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c
       }
     }
   }
-  data$row.names <- as.factor(row_names) #factor(row_names, levels = row_names)
-  # facet_labels = c("Missing SLA", "Missing Aarea", "Missing Narea", "Missing Parea", "Missing Gs")
-  # names(facet_labels) = c('1', '2', '3', '4', '5')
+  data$row.names <- as.factor(row_names)
+  facet_labels = c("Missing Y1", "Missing Y2")
+  names(facet_labels) = c('1', '2')
 
   p <- ggplot(data, aes(x = factor(row.names))) +
     geom_hline(yintercept = 0, linewidth=0.5) +
-    # geom_point(aes(y = actual), col="black", size=1) +
+    # geom_point(aes(y = actual, colour=as.factor(cov)), size=0.1) +
     # geom_crossbar(aes(ymin = lower, ymax = upper, colour=as.factor(group)), width = 0.2) +
-    geom_errorbar(aes(ymin = lower, ymax = upper, colour=as.factor(row.names)), width=0.5) +
+    geom_errorbar(aes(ymin = lower, ymax = upper, colour=as.factor(cov)), width=0.5) +
     labs(x = "Parameters",
          y = "Values") +
     # scale_color_brewer(palette="RdYlGn") +
-    facet_wrap(missing_var ~ ., scales = "free", nrow = 1) +
+    facet_wrap(group ~ ., labeller = as_labeller(facet_labels), scales = "free", nrow = 1) +
     theme_bw() +
     theme(legend.position = "none",
           plot.title = element_text(size = 20),
@@ -419,13 +416,16 @@ plot_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_names = c
           axis.title.y = element_text(size = 18),
           axis.text = element_text(size = 18),
           strip.text = element_text(size=25)) +
-    guides(x =  guide_axis(angle = 90))
+    guides(x =  guide_axis(angle = 0))
     # coord_flip()
   if(!is.null(colours)){
-    p <- p + scale_color_manual(name = "", labels = row_names, values = colours)
+    p <- p + scale_color_manual(name = "", labels = cov, values = colours)
   }
   if(!is.null(plot_title)){
     p <- p + ggtitle(plot_title)
+  }
+  if(show_actual){
+    p <- p + geom_point(aes(y = actual, colour=as.factor(cov)), size=0.1)
   }
   print(p)
   invisible(p)
@@ -470,12 +470,12 @@ plot_plant_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_nam
     facet_wrap(missing_var ~ ., labeller = as_labeller(facet_labels), scales = "free", nrow = 1) +
     theme_bw() +
     theme(legend.position = "none",
-          plot.title = element_text(size = 20),
-          axis.title.x = element_text(size = 18),
-          axis.title.y = element_text(size = 18),
-          axis.text = element_text(size = 18),
-          strip.text = element_text(size=25)) +
-    guides(x =  guide_axis(angle = 90))
+          plot.title = element_text(size = 15),
+          axis.title.x = element_text(size = 15),
+          axis.title.y = element_text(size = 15),
+          axis.text = element_text(size = 12),
+          strip.text = element_text(size=15)) +
+    guides(x =  guide_axis(angle = 0))
   # coord_flip()
   if(!is.null(colours)){
     p <- p + scale_color_manual(name = "", labels = col_names, values = colours)
@@ -485,4 +485,36 @@ plot_plant_posterior <- function(actual, post_list, q = c(0.025, 0.975), row_nam
   }
   print(p)
   invisible(p)
+}
+
+bart_img <- function(){
+
+  img2 <- "
+   |\\/\\/\\/|
+   |      |     _______________________
+   |      |    |                       |
+   | (o)(o)    | missBART1 in progress |
+   C      _)   |                       |
+    | ,___|   /________________________|
+    |   /
+   /____\\
+  /      \\
+  "
+  cat(img2, "\n")
+}
+
+bart_img2 <- function(){
+
+  img2 <- "
+   |\\/\\/\\/|
+   |      |     _______________________
+   |      |    |                       |
+   | (o)(o)    | missBART2 in progress |
+   C      _)   |                       |
+    | ,___|   /________________________|
+    |   /
+   /____\\
+  /      \\
+  "
+  cat(img2, "\n")
 }

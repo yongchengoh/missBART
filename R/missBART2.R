@@ -37,24 +37,17 @@
 #' # bart_out <- missBART2(x, y, n_trees = 2, burn = 2,
 #' #                       iters = 2, thin = 1, scale = FALSE)
 missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 100, burn = 1000, iters = 1000, thin = 2,
-                      predict = TRUE, MH_sd = 0.5, tree_prior_params = tree_list(...), hypers = hypers_list(...),
+                      predict = TRUE, MH_sd = NULL, tree_prior_params = tree_list(...), hypers = hypers_list(...),
                       scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE, progress_every = 10,
                       pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = TRUE, true_trees_data = NA,
                       true_trees_missing = NA, true_change_points = NA, true_change_points_miss = NA, ...) {
 
+  bart_img2()
+
   if(is.null(x_predict)) predict <- FALSE
   y <- as.matrix(y)
   x <- as.matrix(x)
-  if(!is.null(x_predict)) x_predict <- as.matrix(x_predict)
-  for(l in 1:ncol(x)) {
-    if(any(is.na(x[,l]))) {
-      x <- cbind(x, 1 - as.integer(is.na(x[,l])))
-      if(predict) {
-        x_predict <- cbind(x_predict, 1 - as.integer(is.na(x_predict[,l])))
-        colnames(x_predict) <- colnames(x)
-      }
-    }
-  }
+  x_predict <- as.matrix(x_predict)
 
   missing_index <- which(is.na(y))
   obs_index <- which(!is.na(y))
@@ -89,15 +82,8 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
     sigest[i] <- summary(stats::lm(y[,i]~x))$sigma
   }
   lambda <- (sigest^2) * qchi/nu
-  # print(paste("nu =", nu))
-  # print(paste("lambda =", lambda))
-  if(p == 1) {
-    print(paste("sd_ols", (sigest * (max_y - min_y))))
-    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))))
-  } else {
-    print(paste("sd_ols", (sigest * (max_y - min_y))))
-    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))))
 
+  if(p>1) {
     alpha <- ifelse(is.null(hypers$alpha), nu, hypers$alpha)
     if(is.null(hypers$V)) {
       V <- diag(1/(lambda * alpha), p)
@@ -107,9 +93,7 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
       Vinv <- solve(V)
     }
   }
-  # for(j in seq_len(p)) {
-  #   curve(dgamma(x, shape = nu/2, rate = nu * lambda[j]/2), from = 0, to = 100)
-  # }
+  if(is.null(MH_sd)) MH_sd <- 0.5/p
 
   #####-------------------- FIRST IMPUTATION OF DATA --------------------#####
   if(mice_impute) {
@@ -118,7 +102,21 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   } else {
     y[missing_index] <- 0
   }
-  # y[missing_index] <- y_train_scale[missing_index]
+
+  #####-------------------- MISSING X --------------------#####
+  if(any(is.na(x))){
+    m_x <- data.frame(mx=matrix(1, nrow=nrow(x), ncol=ncol(x)))
+    m_x[is.na(x)] <- 0
+    x <- as.matrix(cbind(x, m_x))
+    if(predict){
+      m_x_pred <- data.frame(mx=matrix(1, nrow=nrow(x_predict), ncol=ncol(x_predict)))
+      m_x_pred[is.na(x_predict)] <- 0
+      x_predict <- cbind(x_predict, m_x_pred)
+      x_predict <- as.matrix(x_predict)
+    }
+    q <- ncol(x)
+    x_vars <- seq_len(q)
+  }
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha <- tree_prior_params$prior_alpha
@@ -128,6 +126,7 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
 
   #####-------------------- CREATE STORAGE FOR REGRESSION BART --------------------#####
   accepted_reg_trees <- lapply(vector(mode = "list", length = n_reg_trees), as.list)
+  reg_trees <- vector(mode = "list", length = 0)
   reg_change_id <- vector(mode = "list", length = n_reg_trees)
 
   reg_mu <- vector(mode = "list", length = thinned)
@@ -137,7 +136,6 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   reg_prior <- lapply(vector(mode = "list", length = n_reg_trees), as.list) # tree prior for accepted trees
   reg_likely <- lapply(vector(mode = "list", length = n_reg_trees), as.list) # likelihood for accepted trees
   reg_accept <- lapply(vector(mode = "list", length = n_reg_trees), as.list) # accept/reject status for all trees: reg_accept[[j]][[i]]
-  # reg_moves <- NULL
 
   #####-------------------- CREATE STORAGE FOR PROBIT BART --------------------#####
   R_post <- vector(mode = "list", length = 0)
@@ -145,8 +143,10 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   y_pred <- vector(mode = "list", length = 0)
   z_post <- vector(mode = "list", length = 0)
   y_impute <- vector(mode = "list", length = 0)
+  var_imp <- vector(mode = "list", length = 0)
 
   accepted_class_trees <- lapply(vector(mode = "list", length = n_class_trees), as.list)
+  class_trees <- vector(mode = "list", length = 0)
   class_change_id <- vector(mode = "list", length = n_class_trees)
 
   class_mu <- vector(mode = "list", length = thinned)
@@ -174,7 +174,6 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   reg_change_id <- lapply(seq_len(n_reg_trees), function(x) reg_change_id[[x]] = rep(1, n))
 
   # kappa_reg_list <- c()
-
   reg_mu[[1]] <- sapply(seq_len(n_reg_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = diag(kappa_reg, p))))
   reg_phi <- lapply(seq_len(n_reg_trees), function(x) rep(reg_mu[[1]][[x]], n))
 
@@ -186,7 +185,6 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
   class_change_id <- lapply(seq_len(n_class_trees), function(x) class_change_id[[x]] = rep(1, n))
 
   kappa_class <- 4/9*(n_class_trees)
-
   class_mu[[1]] <- sapply(seq_len(n_class_trees), function(x) list(rMVN(mu = matrix(0, nrow=p), Q = diag(kappa_class, p))))
   class_phi <- lapply(seq_len(n_class_trees), function(x) rep(class_mu[[1]][[x]], n))
 
@@ -425,6 +423,11 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
       z_post <- append(z_post, list(z))
       # kappa_reg_list <- c(kappa_reg_list, kappa_reg)
 
+      var_imp <- append(var_imp, list(table(Reduce(append,lapply(accepted_class_trees, function(X) X[-1,4])))/2))
+
+      reg_trees <- append(reg_trees, list(accepted_reg_trees))
+      class_trees <- append(class_trees, list(accepted_class_trees))
+
       if(predict) {
         new_pred_mean <- Reduce("+", reg_phi_pred)
         new_predictions <- multi_rMVN(new_pred_mean, new_omega)
@@ -440,46 +443,12 @@ missBART2 <- function(x, y, x_predict = c(), n_reg_trees = 100, n_class_trees = 
 
   return(structure(list(y_post = y_post, omega_post = omega_post,
                         x = x, y_impute = y_impute, new_y_post = new_y_post,
-                        accepted_reg_trees = accepted_reg_trees, accepted_class_trees = accepted_class_trees,
+                        reg_trees = reg_trees, class_trees = class_trees,
                         burn = burn, iters = iters, thin = thin,
                         max_y = max_y, min_y = min_y,
                         z_post = z_post,
                         y_pred = y_pred, pdp_out = pdp_out,
-                        y_miss_accept = y_miss_accept, reg_mu = reg_mu, class_mu = class_mu), class = "bart"))
+                        y_miss_accept = y_miss_accept,
+                        reg_mu = reg_mu, class_mu = class_mu, MH_sd = MH_sd,
+                        var_imp = var_imp), class = "bart"))
 }
-
-# print.bart <- function(bart_out, ...) {
-#   if(!inherits(bart_out, "bart")) stop("x must be of class 'bart'")
-#   y_post <- bart_out$y_post
-#   y <- bart_out$imputed_y
-#   x <- bart_out$x
-#   min_y <- bart_out$min_y
-#   min_x <- bart_out$min_x
-#
-#   mean_y_post <- Reduce("+", y_post)/length(y_post)
-#   mean_y_post <- unscale(mean_y_post, min = min_y, max = max_y, std = FALSE)
-#   y <- unscale(y, min = min_y, max = max_y, std = FALSE)
-#
-#   # for(i in seq_len(p)) {
-#   #   for(j in c(1,6,7,16,22,25)) {
-#   #     print(ggplot(data = data.frame(x=x[,j], y=y[,i], m=m[,i]), aes(x, y, color=as.factor(m))) + geom_point(size = 0.9) + ylab(colnames(y)[i]) + xlab(colnames(x)[j]))
-#   #   }
-#   # }
-#
-#   bart_plot <- list()
-#   for(i in seq_len(p)){
-#     plot_data <- data.frame(true = y[which(m[,i] == 1),i], pred = mean_y_post[which(m[,i] == 1),i])
-#     min <- min(plot_data)
-#     max <- max(plot_data)
-#     cheat <- data.frame(y_seq = seq(min, max, length=nrow(plot_data)))
-#     bart_plot <- ggplot(plot_data, aes(true, pred)) + geom_point() + geom_line(data=cheat, aes(y_seq, y_seq), colour="black", size=0.1)
-#     print(bart_plot)
-#   }
-#
-#   for(i in seq_len(p)) {
-#     # for(j in c(1,6,7,16,22,25)) {
-#       # print(ggplot(data.frame(x=x[,j], y=mean_y_post[,i], m=m[,i]), aes(x, y, colour=factor(m))) + geom_point())
-#       print(ggplot(data.frame(y = mean_y_post[,i], m = factor(m[,i])), aes(x = y, colour=m)) + geom_histogram(fill="white") + facet_grid(m ~ .))
-#     # }
-#   }
-# }

@@ -35,9 +35,9 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
                            predict = TRUE, tree_prior_params = tree_list(...), hypers = hypers_list(...),
                            scale = TRUE, include_x = TRUE, include_y = TRUE, show_progress = TRUE,
                            progress_every = 10, pdp_range = c(-0.5, 0.5), make_pdp = FALSE, mice_impute = TRUE,
-                           true_trees_data = NA, true_change_points = NA,...) {
+                           true_trees_data = NA, true_change_points = NA, ...) {
 
-
+  bart_img()
   if(is.null(x_predict)) predict <- FALSE
   y <- as.matrix(y)
   x <- as.matrix(x)
@@ -89,15 +89,8 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
     sigest[i] = summary(stats::lm(y[,i]~x))$sigma
   }
   lambda <- (sigest^2) * qchi/nu
-  # print(paste("nu =", nu))
-  # print(paste("lambda =", lambda))
-  if(p == 1) {
-    print(paste("sd_ols", (sigest * (max_y - min_y))^2))
-    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
-  } else {
-    print(paste("sd_ols", (sigest * (max_y - min_y))^2))
-    print(paste("E(sd_original_scale) =", (1/sqrt(1/lambda/(max_y - min_y)^2))^2))
 
+  if(p>1) {
     alpha <- ifelse(is.null(hypers$alpha), nu, hypers$alpha)
     if(is.null(hypers$V)) {
       V <- diag(1/(lambda * alpha), p)
@@ -108,9 +101,14 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
     }
   }
 
-  # for(j in seq_len(p)) {
-  #   curve(dgamma(x, shape = nu/2, rate = nu * lambda[j]/2), from = 0, to = 100)
-  # }
+  a0 <- 2
+  b0 <- 1
+  ax <- q+1
+  ay <- 1
+  bx <- p+q+1
+  by <- 1
+
+  Psi <- diag(c(b0/a0, rep(bx/ax, q), rep(by/ay), p),r)
 
   #####-------------------- FIRST IMPUTATION OF DATA --------------------#####
   if(mice_impute) {
@@ -119,7 +117,6 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
   } else {
     y[missing_index] <- 0
   }
-  # y[missing_index] <- y_train_scale[missing_index]
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha <- tree_prior_params$prior_alpha
@@ -166,6 +163,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
   y_pred <- vector(mode = "list", length = 0)
   y_impute <- vector(mode = "list", length = 0)
   z_post <- vector(mode = "list", length = 0)
+  tau_b <- rep(NA, r) #vector(mode = "list", length = 0)
 
   new_B <- matrix(0, ncol=p, nrow=r) #matrix(rnorm(r*p, mean = 0, sd = 1/sqrt(tau_b)), ncol = p)
   new_R <- D <- diag(p)
@@ -174,14 +172,9 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
   z[missing_index] <- -1
   Y <- probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
 
-  if(is.null(hypers$tau_b)){
-    tau_b <- as.numeric((qnorm(0.95)/3)^2 * apply(Y, 2, crossprod))
-  } else {
-    tau_b <- hypers$tau_b
-  }
-  print(tau_b)
-
-  Psi <- diag(1/tau_b, r) #diag(r*100, r) #rInvWishart(1, r + 1, diag(r))[,,1]
+  Psi_taub <- update_Psi(B = new_B, R = new_R, a0 = a0, b0 = b0, ax = ax, bx = bx, ay = ay, by = by)
+  Psi <- Psi_taub$Psi
+  new_taub <- Psi_taub$tau_b
 
   #####----- OUT-OF-SAMPLE PREDICTIONS -----#####
   if(predict) {
@@ -288,7 +281,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
     # y_miss <- update_y_miss_reg(x = x, y_hat = y_hat, m = m, y = y, z = z, B = new_B, R = new_R, omega = new_omega, include_x = include_x, include_y = include_y)[missing_index]
 
     y[missing_index] <- y_miss
-    Y <- probit_predictors(x, y, include_x = include_x, include_y = include_y, intercept = TRUE)
+    Y <- probit_predictors(x = x, y = y, include_x = include_x, include_y = include_y, intercept = TRUE)
 
     #--Sample data precision and kappa
     if(p == 1) {
@@ -300,9 +293,13 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
 
     ###----- Probit updates -----###
     z <- update_z(Y, m, new_B, new_R)
+
     if(p == 1) {
       new_R <- diag(p)
-      new_B <- update_B(y, z, Y, tau_b = tau_b)
+      new_B <- update_B(y, z, Y, tau_b = new_taub)
+      Psi_taub <- update_Psi(B = new_B, R = new_R, a0 = a0, b0 = b0, ax = ax, bx = bx, ay = ay, by = by)
+      Psi <- Psi_taub$Psi
+      new_taub <- Psi_taub$tau_b
     } else {
       W <- update_W(R = new_R, z = z)
       Sigma_gamma <- update_sigma_gamma(p, Y, Psi, W)
@@ -314,7 +311,9 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
       D <- RB$D
 
       #--Sample Psi--#
-      # Psi <- update_Psi(r + 1, diag(r), new_B, new_R)
+      Psi_taub <- update_Psi(B = new_B, R = new_R, a0 = a0, b0 = b0, ax = ax, bx = bx, ay = ay, by = by)
+      Psi <- Psi_taub$Psi
+      new_taub <- Psi_taub$tau_b
     }
 
     ###----- Out-of-Sample Predictions -----###
@@ -333,7 +332,6 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
         if(p == 1) {
           omega_post <- append(omega_post, list(1/(new_omega/(max_y - min_y)^2)))  # returns the residual variance on the original scale
         } else {
-          # omega_post <- append(omega_post, list(diag(1/(diag(new_omega)/(max_y - min_y)^2), p)))
           omega_post <- append(omega_post, list(diag(chol2inv(chol(new_omega))) * (max_y - min_y)^2)) # returns the residual covariance matrix on the original scale
         }
       } else {
@@ -350,6 +348,7 @@ missBARTprobit <- function(x, y, x_predict = c(), n_trees = 100, burn = 1000, it
       B_post <- append(B_post, list(new_B))
       if(predict) new_y_post <- append(new_y_post, list(unscale(new_predictions, min_y, max_y)))
       z_post <- append(z_post, list(z))
+      tau_b <- rbind(tau_b, new_taub)
     }
 
     if(p == 1 && make_pdp){

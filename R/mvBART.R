@@ -30,16 +30,7 @@ mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 100
   if(is.null(x_predict)) predict <- FALSE
   y <- as.matrix(y)
   x <- as.matrix(x)
-
-  for(l in 1:ncol(x)) {
-    if(any(is.na(x[,l]))) {
-      x <- cbind(x, 1 - as.integer(is.na(x[,l])))
-      if(predict) {
-        x_predict <- cbind(x_predict, 1 - as.integer(is.na(x_predict[,l])))
-        colnames(x_predict) <- colnames(x)
-      }
-    }
-  }
+  x_predict <- as.matrix(x_predict)
 
   min_y <- apply(y, 2, min, na.rm = TRUE)
   max_y <- apply(y, 2, max, na.rm = TRUE)
@@ -65,6 +56,7 @@ mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 100
   sigest <- rep(0, p)
   for(i in seq_len(p)) {
     sigest[i] <- summary(stats::lm(y[,i]~x))$sigma
+    if(is.nan(sigest[i])) sigest[i] <- sd(y[,i])
   }
   lambda <- (sigest^2) * qchi/nu
   # print(paste("nu =", nu))
@@ -88,6 +80,21 @@ mvBART <- function(x, y, x_predict = NA, n_trees = 100, burn = 1000, iters = 100
   # for(j in seq_len(p)) {
   #   curve(dgamma(x, shape = nu/2, rate = nu * lambda[j]/2), from = 0, to = 100)
   # }
+
+  #####-------------------- MISSING X --------------------#####
+  if(any(is.na(x))){
+    m_x <- data.frame(mx=matrix(1, nrow=nrow(x), ncol=ncol(x)))
+    m_x[is.na(x)] <- 0
+    x <- as.matrix(cbind(x, m_x))
+    if(predict){
+      m_x_pred <- data.frame(mx=matrix(1, nrow=nrow(x_predict), ncol=ncol(x_predict)))
+      m_x_pred[is.na(x_predict)] <- 0
+      x_predict <- cbind(x_predict, m_x_pred)
+      x_predict <- as.matrix(x_predict)
+    }
+    q <- ncol(x)
+    x_vars <- seq_len(q)
+  }
 
   #####-------------------- GET TREE PRIOR PARAMETERS --------------------#####
   prior_alpha <- tree_prior_params$prior_alpha
